@@ -1,7 +1,7 @@
 import numpy as np
-from constants_kinetic_bicycle import *
+from utils.constants_kinetic_bicycle import *
 
-def vehicle_dynamics(x,u,dt):
+def kinetic_bicycle(x,u,dt):
     '''
     Kinematic bicycle model
     state: x, y, speed (v), heading angle (theta)
