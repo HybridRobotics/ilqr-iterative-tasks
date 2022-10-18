@@ -26,3 +26,6 @@ jobs:
     - name: Test nonlinear lmpc controller with pytest
       run:
         pytest tests/nlmpc_test.py --doctest-modules
+    - name: Test ilqr controller with pytest
+      run:
+        pytest tests/ilqr_test.py --doctest-modules

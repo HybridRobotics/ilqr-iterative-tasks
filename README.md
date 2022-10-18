@@ -47,6 +47,20 @@ This allows to test the nonlinear lmpc controller. The argparse arguments are li
 | `ss_option` | string | `space`, `time` or `all` | criteria for history states selection |
 |   `plotting`   | action |               `store_true`                |                    save plotting if true                     |
 
+
+#### Iterative lqr for iterative tasks
+Run
+```
+python iterative_ilqr/tests/ilqr_test.py --lap-number 5 --num-ss-iters 1 --num-ss-points 8
+```
+This allows to test the nonlinear lmpc controller. The argparse arguments are listed as follow,
+| name | type | choices | description |
+| :---: | :---: | :---: | :---: |
+| `lap_number` | int | any number that is greater than `2` | number of laps that will be simulated |
+| `num_ss_iters` | int | any number that is greater than `1` | iterations used for learning |
+| `num_ss_points` | int | any number that is greater than `1` | history states used for learning |
+|   `plotting`   | action |               `store_true`                |                    save plotting if true                     |
+
 #### Known Issues
 To change the simulation timestep, the number of prediction horizon and number of history states used for learning should be changed.
 

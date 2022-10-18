@@ -1,20 +1,22 @@
-import os
+import pytest
 import numpy as np
 from utils import base
 from utils.constants_kinetic_bicycle import *
 from copy import deepcopy
 
 
-def test_ilqr(args):
+@pytest.mark.parametrize("ss_option", ["space"])
+def test_ilqr(ss_option):
     num_horizon = 6
     dt = 1
     sim_time = 50
-    ss_optioin = "spaceVarying"
-    lap_number = args["lap_number"]
-    num_ss_iter = args["num_ss_iters"]
-    num_ss_points = args["num_ss_points"]
+    lap_number = 5
+    num_ss_iter = 1
+    num_ss_points = 8
     all_ss_point = False
     all_ss_iter = False
+    if ss_option == "space":
+        ss_optioin = "spaceVarying"
     x0 = [0, 0, 0, 0]
     ego = base.KineticBicycle(system_param=base.KineticBicycleParam())
     ego.set_state(x0)
@@ -55,17 +57,5 @@ def test_ilqr(args):
     for id in range(len(ego.all_times)):
         lap = id + 1
         print("time at iteration ", lap, " is ", (len(ego.all_times[id]) * dt), " s")
-    if args["plotting"]:
-        simulator.plot_inputs()
-        simulator.plot_simulation()
-
-
-if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--lap-number", type=int)
-    parser.add_argument("--num-ss-points", type=int)
-    parser.add_argument("--num-ss-iters", type=int)
-    parser.add_argument("--plotting", action="store_true")
-    args = vars(parser.parse_args())
-    test_ilqr(args)
+    simulator.plot_inputs()
+    simulator.plot_simulation()
