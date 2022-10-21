@@ -52,7 +52,6 @@ def test_ilqr(ss_option):
         simulator.sim(iter, sim_time=sim_time)
         ego.all_xs[-1].append(deepcopy(ego.xcl[:,-1].T))
         ilqr.add_trajectory(np.array(ego.all_xs[-1]).T, np.array(ego.all_inputs[-1]).T)
-        # lmpc.num_horizon = num_horizon
     print("time at iteration 0 is", len(ego.xcl.T) * dt, " s")
     for id in range(len(ego.all_times)):
         lap = id + 1

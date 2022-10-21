@@ -207,9 +207,16 @@ class iLqrParam:
         num_ss_points=8,
         num_ss_iter=1,
         num_horizon=6,
+        tuning_state_q1 = 1.0,
+        tuning_state_q2 = 1.0,
+        tuning_ctrl_q1 = 1.0,
+        tuning_ctrl_q2 = 1.0,
+        tuning_obs_q1 = 2.25,
+        tuning_obs_q2 = 2.25,
+        safety_margin = 0.5,
         timestep=None,
         lap_number=None,
-        time_lmpc=None,
+        time_ilqr=None,
         ss_option=None,
         all_ss_point=False,
         all_ss_iter=False,
@@ -222,10 +229,17 @@ class iLqrParam:
         self.num_horizon = num_horizon
         self.timestep = timestep
         self.lap_number = lap_number
-        self.time_lmpc = time_lmpc
+        self.time_ilqr = time_ilqr
         self.ss_option = ss_option
         self.all_ss_point = all_ss_point
         self.all_ss_iter = all_ss_iter
+        self.tuning_state_q1 = tuning_state_q1
+        self.tuning_state_q2 = tuning_state_q2
+        self.tuning_ctrl_q1 = tuning_ctrl_q1
+        self.tuning_ctrl_q2 = tuning_ctrl_q2
+        self.tuning_obs_q1 = tuning_obs_q1
+        self.tuning_obs_q2 = tuning_obs_q2
+        self.safety_margin = safety_margin
 
 
 class iLqr(ControlBase):
@@ -372,9 +386,9 @@ class iLqr(ControlBase):
                         # System derivation
                         f_x = get_A_matrix(xvar[2, 1:], xvar[3, 1:], uvar[0,:], self.num_horizon, self.timestep)
                         f_u = get_B_matrix(xvar[3, 1:], self.num_horizon, self.timestep)
-                        matrix_k, matrix_K = backward_pass(xvar, uvar, x_terminal, dX, lamb, num_horizon, f_x, f_u, self.matrix_Q, self.matrix_R, self.matrix_Qlamb, self.obstacle)
+                        matrix_k, matrix_K = backward_pass(xvar, uvar, x_terminal, dX, lamb, num_horizon, f_x, f_u, self.ilqr_param, self.obstacle)
                         # Forward pass
-                        xvar_new, uvar_new, cost_new = forward_pass(xvar, uvar, x_terminal, self.timestep, self.num_horizon, matrix_k, matrix_K, self.matrix_Q, self.matrix_R, self.matrix_Qlamb)
+                        xvar_new, uvar_new, cost_new = forward_pass(xvar, uvar, x_terminal, self.ilqr_param, self.timestep, self.num_horizon, matrix_k, matrix_K)
                         if cost_new < cost:
                             uvar = uvar_new
                             xvar = xvar_new
@@ -393,8 +407,6 @@ class iLqr(ControlBase):
                 else:
                     x_next = kinetic_bicycle(self.x, self.u_old[:,0], self.timestep)
                     xvar[:,-1] = x_next
-                    print('u_old', self.u_old.shape)
-                    print(uvar.shape)
                     uvar[:,0] = self.u_old[:,0]
                     # check for feasibility and store the solution
                     if np.linalg.norm([x_next[0:3]-x_terminal[0:3]]) <= 0.5:
