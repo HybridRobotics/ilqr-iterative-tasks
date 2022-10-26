@@ -41,7 +41,7 @@ def nlmpc_test(args):
         all_ss_iter=all_ss_iter,
         all_ss_point=all_ss_point,
     )
-    lmpc = base.LMPC(lmpc_param, obstacle, system_param=base.KineticBicycleParam())
+    lmpc = base.LMPC(lmpc_param, obstacle=obstacle, system_param=base.KineticBicycleParam())
     lmpc.add_trajectory(ego.xcl, ego.ucl)
     lmpc.set_initial_traj(ego.xcl, ego.ucl)
     lmpc.set_timestep(dt)

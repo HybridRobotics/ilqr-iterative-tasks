@@ -487,7 +487,7 @@ class LMPCParam:
 
 
 class LMPC(ControlBase):
-    def __init__(self, lmpc_param, obstacle, system_param=None):
+    def __init__(self, lmpc_param, obstacle=None, system_param=None):
         ControlBase.__init__(self)
         self.lmpc_param = lmpc_param
         self.system_param = system_param
@@ -611,8 +611,6 @@ class LMPC(ControlBase):
                 )
             ] = self.u_ss[best_iter][:, id_list[best_iter_loc_ss][best_time]]
         else:
-            # print("index list", id_list[best_iter_loc_ss][best_time])
-            # print("ss", self.ss[best_iter].shape[1])
             self.x_terminal_guess = x_pred_flatten[
                 X_DIM * self.num_horizon : X_DIM * (self.num_horizon + 1)
             ]
@@ -714,7 +712,8 @@ class Simulator:
             list_xs.append(self.robotic.all_xs[-1][index])
         array_xs = np.asarray(list_xs)
         fig, ax = plt.subplots()
-        self.robotic.ctrl_policy.obstacle.plot_obstacle()
+        if self.robotic.ctrl_policy.obstacle is not None:
+            self.robotic.ctrl_policy.obstacle.plot_obstacle()
         line1, = ax.plot(array_xs[:, 0], array_xs[:, 1], label="trajectory at last iteration")
         line2, = ax.plot(self.robotic.xcl[0, :], self.robotic.xcl[1,:], label="initial trajectory")
         plt.legend(handles=[line1,line2])

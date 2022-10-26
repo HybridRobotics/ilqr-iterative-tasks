@@ -21,7 +21,8 @@ def nlmpc(
             X = SX.sym("X", X_DIM * (num_horizon + 1))
             U = SX.sym("X", U_DIM * num_horizon)
             slack = SX.sym("X", X_DIM)
-            slack_obs = SX.sym("X", (num_horizon - 1))
+            if obstacle is not None:
+                slack_obs = SX.sym("X", (num_horizon - 1))
             constraint = []
             for i in range(0, num_horizon):
                 constraint = vertcat(
@@ -50,13 +51,14 @@ def nlmpc(
                     constraint,
                     X[X_DIM * (i + 1) + 3] - (X[X_DIM * i + 3] + U[U_DIM * i + 1] * timestep),
                 )
-            for i in range(1, num_horizon):
-                constraint = vertcat(
-                    constraint,
-                    ((X[X_DIM * i + 0] - obstacle.x) ** 2 / (obstacle.width**2))
-                    + ((X[X_DIM * i + 1] - obstacle.y) ** 2 / (obstacle.height**2))
-                    - slack_obs[i - 1],
-                )               
+            if obstacle is not None:
+                for i in range(1, num_horizon):
+                    constraint = vertcat(
+                        constraint,
+                        ((X[X_DIM * i + 0] - obstacle.x) ** 2 / (obstacle.width**2))
+                        + ((X[X_DIM * i + 1] - obstacle.y) ** 2 / (obstacle.height**2))
+                        - slack_obs[i - 1],
+                    )               
             constraint = vertcat(
                 constraint,
                 X[X_DIM * num_horizon : X_DIM * (num_horizon + 1)] - x_terminal + slack,
@@ -73,27 +75,47 @@ def nlmpc(
                 "ipopt.mu_min": 1e-15,
                 "ipopt.barrier_tol_factor": 1,
             }
-            nlp = {"x": vertcat(X, U, slack, slack_obs), "f": cost, "g": constraint}
+            if obstacle is None:
+                nlp = {"x": vertcat(X, U, slack), "f": cost, "g": constraint}
+            else:
+                nlp = {"x": vertcat(X, U, slack, slack_obs), "f": cost, "g": constraint}
             solver = nlpsol("solver", "ipopt", nlp, opts)
-            lbg_dyanmics = [0] * (X_DIM * num_horizon) + [0 * 1.0] * (num_horizon - 1) + [0] * X_DIM
-            ubg_dyanmics = (
-                [0] * (X_DIM * num_horizon) + [0 * 100000000] * (num_horizon - 1) + [0] * X_DIM
-            )
-            lbx = (
-                x
-                + [-1000] * (X_DIM * (num_horizon))
-                + [-sys_param.a_max, -sys_param.delta_max] * num_horizon
-                + [-1000] * X_DIM
-                + [1] * (num_horizon - 1)
-            )
-            ubx = (
-                x
-                + [1000] * (X_DIM * (num_horizon))
-                + [sys_param.a_max, sys_param.delta_max] * num_horizon
-                + [1000] * X_DIM
-                + [100000] * (num_horizon - 1)
-            )
-            xGuessTot = np.concatenate((x_guess, np.zeros(X_DIM + num_horizon - 1)), axis=0)
+            if obstacle is None:
+                lbg_dyanmics = [0] * (X_DIM * num_horizon) + [0] * X_DIM
+                ubg_dyanmics = [0] * (X_DIM * num_horizon) + [0] * X_DIM
+                lbx = (
+                    x
+                    + [-1000] * (X_DIM * (num_horizon))
+                    + [-sys_param.a_max, -sys_param.delta_max] * num_horizon
+                    + [-1000] * X_DIM
+                )
+                ubx = (
+                    x
+                    + [1000] * (X_DIM * (num_horizon))
+                    + [sys_param.a_max, sys_param.delta_max] * num_horizon
+                    + [1000] * X_DIM
+                )
+                xGuessTot = np.concatenate((x_guess, np.zeros(X_DIM)), axis=0)
+            else:                
+                lbg_dyanmics = [0] * (X_DIM * num_horizon) + [0 * 1.0] * (num_horizon - 1) + [0] * X_DIM
+                ubg_dyanmics = (
+                    [0] * (X_DIM * num_horizon) + [0 * 100000000] * (num_horizon - 1) + [0] * X_DIM
+                )
+                lbx = (
+                    x
+                    + [-1000] * (X_DIM * (num_horizon))
+                    + [-sys_param.a_max, -sys_param.delta_max] * num_horizon
+                    + [-1000] * X_DIM
+                    + [1] * (num_horizon - 1)
+                )
+                ubx = (
+                    x
+                    + [1000] * (X_DIM * (num_horizon))
+                    + [sys_param.a_max, sys_param.delta_max] * num_horizon
+                    + [1000] * X_DIM
+                    + [100000] * (num_horizon - 1)
+                )
+                xGuessTot = np.concatenate((x_guess, np.zeros(X_DIM + num_horizon - 1)), axis=0)
             sol = solver(
                 lbx=lbx,
                 ubx=ubx,
