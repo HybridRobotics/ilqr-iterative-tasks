@@ -6,6 +6,14 @@ from copy import deepcopy
 
 
 def test_ilqr(args):
+    if args["save_trajectory"]:
+        save_ilqr_traj = True
+    else:
+        save_ilqr_traj = False
+    if args["direct_ilqr"]:
+        direct_ilqr = True
+    else:
+        direct_ilqr = False
     num_horizon = 6
     dt = 1
     sim_time = 50
@@ -16,7 +24,7 @@ def test_ilqr(args):
     all_ss_point = False
     all_ss_iter = False
     x0 = [0, 0, 0, 0]
-    ego = base.KineticBicycle(system_param=base.KineticBicycleParam())
+    ego = base.KineticBicycle(direct_ilqr, system_param=base.KineticBicycleParam())
     ego.set_state(x0)
     ego.set_timestep(dt)
     ego.get_traj()
@@ -25,7 +33,10 @@ def test_ilqr(args):
     y_obs = -2
     width_obs = 8
     height_obs = 6
-    obstacle = base.Obstacle(x_obs, y_obs, width_obs, height_obs)
+    if args["direct_ilqr"]:
+        obstacle = base.Obstacle(x_obs, y_obs, width_obs, height_obs)
+    else:
+        obstacle = None
     ilqr_param = base.iLqrParam(
         num_ss_points=num_ss_points,
         num_ss_iter=num_ss_iter,
@@ -35,7 +46,7 @@ def test_ilqr(args):
         all_ss_iter=all_ss_iter,
         all_ss_point=all_ss_point,
     )
-    ilqr = base.iLqr(ilqr_param, obstacle, system_param=base.KineticBicycleParam())
+    ilqr = base.iLqr(ilqr_param, obstacle=obstacle, system_param=base.KineticBicycleParam())
     ilqr.add_trajectory(ego.xcl, ego.ucl)
     ilqr.set_initial_traj(ego.xcl, ego.ucl)
     ilqr.set_timestep(dt)
@@ -50,7 +61,9 @@ def test_ilqr(args):
         simulator.sim(iter, sim_time=sim_time)
         ego.all_xs[-1].append(deepcopy(ego.xcl[:,-1].T))
         ilqr.add_trajectory(np.array(ego.all_xs[-1]).T, np.array(ego.all_inputs[-1]).T)
-        # lmpc.num_horizon = num_horizon
+    if save_ilqr_traj == True:
+        np.savetxt('data/closed_loop_multi_laps.txt', np.round(np.array(ego.all_xs[-1]).T, decimals=5), fmt='%f' )
+        np.savetxt('data/input_multi_laps.txt', np.round(np.array(ego.all_inputs[-1]).T, decimals=5), fmt='%f' )
     print("time at iteration 0 is", len(ego.xcl.T) * dt, " s")
     for id in range(len(ego.all_times)):
         lap = id + 1
@@ -67,5 +80,7 @@ if __name__ == "__main__":
     parser.add_argument("--num-ss-points", type=int)
     parser.add_argument("--num-ss-iters", type=int)
     parser.add_argument("--plotting", action="store_true")
+    parser.add_argument("--direct-ilqr", action="store_true")
+    parser.add_argument("--save-trajectory", action="store_true")
     args = vars(parser.parse_args())
     test_ilqr(args)

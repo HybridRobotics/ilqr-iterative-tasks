@@ -8,4 +8,4 @@ U_ID = {"accel": 0, "delta": 1}
 # System state / input constriants
 ACCEL_MAX, ACCEL_MIN = 2.0, -2.0
 DELTA_MAX, DELTA_MIN = 1.57, -1.57
-VITESSE_MAX, VITESSE_MIN = 3.14/2, -3.14/2
+VELOCITY_MAX, VELOCITY_MIN = 3.14/2, -3.14/2

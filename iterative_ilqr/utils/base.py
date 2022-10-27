@@ -35,8 +35,9 @@ class Obstacle:
 
 
 class KineticBicycle:
-    def __init__(self, system_param=None):
+    def __init__(self, direct_ilqr=False, system_param=None):
         self.system_param = system_param
+        self.direct_ilqr = direct_ilqr
         self.time = 0.0
         self.timestep = None
         self.x = None
@@ -58,41 +59,45 @@ class KineticBicycle:
         self.x = x
 
     def get_traj(self):
-        angle = np.pi / 6
-        total_time_steps = int(40 / self.timestep)
-        xcl = [
-            np.zeros(
-                X_DIM,
+        if self.direct_ilqr == False:
+            angle = np.pi / 6
+            total_time_steps = int(40 / self.timestep)
+            xcl = [
+                np.zeros(
+                    X_DIM,
+                )
+            ]
+            ucl = []
+            u = np.zeros(
+                U_DIM,
             )
-        ]
-        ucl = []
-        u = np.zeros(
-            U_DIM,
-        )
-        for i in range(0, total_time_steps):
+            for i in range(0, total_time_steps):
 
-            if i <= 1 / self.timestep:
-                u[U_ID["accel"]] = 1
-            elif i >= (total_time_steps - 4 / self.timestep) and i <= (
-                total_time_steps - 3 / self.timestep
-            ):
-                u[U_ID["accel"]] = -1
-            else:
-                u[U_ID["accel"]] = 0
+                if i <= 1 / self.timestep:
+                    u[U_ID["accel"]] = 1
+                elif i >= (total_time_steps - 4 / self.timestep) and i <= (
+                    total_time_steps - 3 / self.timestep
+                ):
+                    u[U_ID["accel"]] = -1
+                else:
+                    u[U_ID["accel"]] = 0
 
-            if i > 0 and i <= 1 / self.timestep:
-                u[U_ID["delta"]] = angle
-            elif (
-                i >= total_time_steps / 2 - 2 / self.timestep
-                and i <= total_time_steps / 2 - 1 / self.timestep
-            ):
-                u[U_ID["delta"]] = -angle
-            else:
-                u[U_ID["delta"]] = 0
-            xcl.append(kinetic_bicycle(deepcopy(xcl[-1]), deepcopy(u), self.timestep))
-            ucl.append(deepcopy(u))
-        xcl, ucl = np.array(xcl).T[:, :-1], np.array(ucl).T[:, :-1]
-        np.savetxt("data/closed_loop_feasible.txt", xcl, fmt="%f")
+                if i > 0 and i <= 1 / self.timestep:
+                    u[U_ID["delta"]] = angle
+                elif (
+                    i >= total_time_steps / 2 - 2 / self.timestep
+                    and i <= total_time_steps / 2 - 1 / self.timestep
+                ):
+                    u[U_ID["delta"]] = -angle
+                else:
+                    u[U_ID["delta"]] = 0
+                xcl.append(kinetic_bicycle(deepcopy(xcl[-1]), deepcopy(u), self.timestep))
+                ucl.append(deepcopy(u))
+            xcl, ucl = np.array(xcl).T[:, :-1], np.array(ucl).T[:, :-1]
+            np.savetxt("data/closed_loop_feasible.txt", xcl, fmt="%f")
+        else:
+            xcl = np.loadtxt('data/closed_loop_multi_laps.txt')
+            ucl = np.loadtxt('data/input_multi_laps.txt')
         self.xcl = xcl
         self.ucl = ucl
 
@@ -243,7 +248,7 @@ class iLqrParam:
 
 
 class iLqr(ControlBase):
-    def __init__(self, ilqr_param, obstacle, system_param=None):
+    def __init__(self, ilqr_param, obstacle=None, system_param=None):
         ControlBase.__init__(self)
         self.ilqr_param = ilqr_param
         self.system_param = system_param
@@ -487,7 +492,7 @@ class LMPCParam:
 
 
 class LMPC(ControlBase):
-    def __init__(self, lmpc_param, obstacle, system_param=None):
+    def __init__(self, lmpc_param, obstacle=None, system_param=None):
         ControlBase.__init__(self)
         self.lmpc_param = lmpc_param
         self.system_param = system_param
@@ -611,8 +616,6 @@ class LMPC(ControlBase):
                 )
             ] = self.u_ss[best_iter][:, id_list[best_iter_loc_ss][best_time]]
         else:
-            # print("index list", id_list[best_iter_loc_ss][best_time])
-            # print("ss", self.ss[best_iter].shape[1])
             self.x_terminal_guess = x_pred_flatten[
                 X_DIM * self.num_horizon : X_DIM * (self.num_horizon + 1)
             ]
@@ -701,6 +704,8 @@ class Simulator:
         fix, axs = plt.subplots(2)
         u = np.asarray(list_inputs)
         axs[0].plot(list_times, u[:, 0], "-o", linewidth=1, markersize=1)
+        axs[0].plot([0,u.shape[0]-2],[2,2], '--k', linewidth=1, markersize=1, label='Saturation limit')
+        axs[0].plot([0,u.shape[0]-2],[-2,-2], '--k', linewidth=1, markersize=1)
         axs[0].set_xlabel("time [s]", fontsize=14)
         axs[0].set_ylabel("$a$ [m/s^2]", fontsize=14)
         axs[1].plot(list_times, u[:, 1], "-o", linewidth=1, markersize=1)
@@ -714,7 +719,8 @@ class Simulator:
             list_xs.append(self.robotic.all_xs[-1][index])
         array_xs = np.asarray(list_xs)
         fig, ax = plt.subplots()
-        self.robotic.ctrl_policy.obstacle.plot_obstacle()
+        if self.robotic.ctrl_policy.obstacle is not None:
+            self.robotic.ctrl_policy.obstacle.plot_obstacle()
         line1, = ax.plot(array_xs[:, 0], array_xs[:, 1], label="trajectory at last iteration")
         line2, = ax.plot(self.robotic.xcl[0, :], self.robotic.xcl[1,:], label="initial trajectory")
         plt.legend(handles=[line1,line2])
