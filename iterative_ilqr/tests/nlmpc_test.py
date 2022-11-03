@@ -21,7 +21,7 @@ def nlmpc_test(args):
             ss_optioin = "spaceVarying"
         elif args["ss_option"] == "time":
             ss_optioin = "timeVarying"
-    x0 = [0, 0, 0, 0]
+    x0 = np.zeros((X_DIM,))
     ego = base.KineticBicycle(system_param=base.KineticBicycleParam())
     ego.set_state(x0)
     ego.set_timestep(dt)
@@ -43,9 +43,7 @@ def nlmpc_test(args):
     )
     lmpc = base.LMPC(lmpc_param, obstacle=obstacle, system_param=base.KineticBicycleParam())
     lmpc.add_trajectory(ego.xcl, ego.ucl)
-    lmpc.set_initial_traj(ego.xcl, ego.ucl)
     lmpc.set_timestep(dt)
-    lmpc.set_state(x0)
     ego.set_ctrl_policy(lmpc)
     simulator = base.Simulator()
     simulator.set_robotic(ego)
@@ -54,12 +52,11 @@ def nlmpc_test(args):
     for iter in range(lap_number):
         print("iteration ", iter, "begins")
         simulator.sim(iter, sim_time=sim_time)
-        lmpc.add_trajectory(np.array(ego.all_xs[-1]).T, np.array(ego.all_inputs[-1]).T)
-        # lmpc.num_horizon = num_horizon
-    print("time at iteration 0 is", len(ego.xcl.T) * dt, " s")
-    for id in range(len(ego.all_times)):
+        lmpc.add_trajectory(ego.data["state"][-1], ego.data["input"][-1])
+    print("time at iteration 0 is", len(ego.xcl) * dt, " s")
+    for id in range(len(ego.data["timestamp"])):
         lap = id + 1
-        print("time at iteration ", lap, " is ", (len(ego.all_times[id]) * dt), " s")
+        print("time at iteration ", lap, " is ", (len(ego.data["timestamp"][id]) * dt), " s")
     if args["plotting"]:
         simulator.plot_inputs()
         simulator.plot_simulation()
