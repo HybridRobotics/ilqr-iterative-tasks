@@ -10,10 +10,6 @@ def test_ilqr(args):
         save_ilqr_traj = True
     else:
         save_ilqr_traj = False
-    if args["direct_ilqr"]:
-        direct_ilqr = True
-    else:
-        direct_ilqr = False
     num_horizon = 6
     dt = 1
     sim_time = 50
@@ -33,10 +29,7 @@ def test_ilqr(args):
     y_obs = -2
     width_obs = 8
     height_obs = 6
-    if args["direct_ilqr"]:
-        obstacle = base.Obstacle(x_obs, y_obs, width_obs, height_obs)
-    else:
-        obstacle = None
+    obstacle = base.Obstacle(x_obs, y_obs, width_obs, height_obs)
     ilqr_param = base.iLqrParam(
         num_ss_points=num_ss_points,
         num_ss_iter=num_ss_iter,
@@ -75,7 +68,6 @@ if __name__ == "__main__":
     parser.add_argument("--num-ss-points", type=int)
     parser.add_argument("--num-ss-iters", type=int)
     parser.add_argument("--plotting", action="store_true")
-    parser.add_argument("--direct-ilqr", action="store_true")
     parser.add_argument("--save-trajectory", action="store_true")
     args = vars(parser.parse_args())
     test_ilqr(args)

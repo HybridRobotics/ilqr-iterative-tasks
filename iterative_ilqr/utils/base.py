@@ -37,9 +37,8 @@ class Obstacle:
 
 
 class KineticBicycle:
-    def __init__(self, direct_ilqr=False, system_param=None):
+    def __init__(self, system_param=None):
         self.system_param = system_param
-        self.direct_ilqr = direct_ilqr
         self.time = 0.0
         self.timestep = None
         self.x = None
@@ -178,7 +177,7 @@ class iLqrParam:
         self,
         matrix_Q=0 * np.diag([0.0, 0.0, 0.0, 0.0]),
         matrix_R=0 * np.diag([1.0, 0.25]),
-        matrix_Qlamb=2 * np.diag([1.0, 1.0, 1.0, 1.0]),
+        matrix_Qlamb=1 * np.diag([1.0, 1.0, 1.0, 1.0]),
         num_ss_points=8,
         num_ss_iter=1,
         num_horizon=6,
@@ -243,7 +242,7 @@ class iLqr(ControlBase):
         self.matrix_R = self.ilqr_param.matrix_R
         self.obstacle = obstacle
         self.max_iter = 100
-        self.eps = 0.01
+        self.eps = 1e-3
         self.lamb = 1
         self.lamb_factor = 10
         self.max_lamb = 1000
@@ -311,7 +310,7 @@ class iLqr(ControlBase):
             ss_point_selected_tot = np.empty((X_DIM, 0))
             index_selected_tot = []
             if iter == 0:
-                zt = self.x.tolist()
+                zt = self.x
             else:
                 zt = xvar_optimal[:, -1]
             for jj in range(self.iter - 1, min_iter - 1, -1):
@@ -334,7 +333,7 @@ class iLqr(ControlBase):
                 # define variables
                 uvar = np.zeros((U_DIM, num_horizon))
                 xvar = np.zeros((X_DIM, num_horizon + 1))
-                xvar[:, 0] = self.x.tolist()
+                xvar[:, 0] = self.x
                 # diffence between xvar and x_track
                 dX = np.zeros((X_DIM, num_horizon + 1))
                 dX[:, 0] = xvar[:, 0] - x_track
@@ -347,6 +346,8 @@ class iLqr(ControlBase):
                         cost = 0
                         # Forward simulation
                         for idx_f in range(num_horizon):
+                            uvar[U_ID["accel"], idx_f] = np.clip(uvar[U_ID["accel"], idx_f], -self.system_param.a_max, self.system_param.a_max)
+                            uvar[U_ID["delta"], idx_f] = np.clip(uvar[U_ID["delta"], idx_f], -self.system_param.delta_max, self.system_param.delta_max)
                             xvar[:, idx_f + 1] = kinetic_bicycle(
                                 xvar[:, idx_f], uvar[:, idx_f], self.timestep
                             )
@@ -390,6 +391,7 @@ class iLqr(ControlBase):
                             self.num_horizon,
                             matrix_k,
                             matrix_K,
+                            self.system_param
                         )
                         if cost_new < cost:
                             uvar = uvar_new
@@ -445,7 +447,7 @@ class iLqr(ControlBase):
             # plt.plot(xvar_optimal[0,0], xvar_optimal[1,0], 'o', color = 'black',markersize = 17)
             # plt.plot(xf_optimal[0],xf_optimal[1],'o', color = 'g',markersize = 10)
             # plt.show()
-            if iter == 4:
+            if iter == 6:
                 # Change time horizon length
                 if (id_list[bestTime] + 1) > (self.ss[-1].shape[1] - 1):
                     self.num_horizon = self.num_horizon - 1
