@@ -301,7 +301,7 @@ class iLqr(ControlBase):
         # select the oldest iteration used
         min_iter = np.max([0, self.iter - self.ilqr_param.num_ss_iter])
         for iter in range(self.max_iter):
-            startTimer = datetime.datetime.now()
+            # startTimer = datetime.datetime.now()
             # Initialize the list which will store the solution to the ftocp for the l-th iteration in the safe set
             cost_list = []
             u_list = []
@@ -351,11 +351,9 @@ class iLqr(ControlBase):
                         cost = 0
                         # Forward simulation
                         for idx_f in range(num_horizon):
-                            uvar[U_ID["accel"], idx_f] = np.clip(uvar[U_ID["accel"], idx_f], -self.system_param.a_max, self.system_param.a_max)
-                            uvar[U_ID["delta"], idx_f] = np.clip(uvar[U_ID["delta"], idx_f], -self.system_param.delta_max, self.system_param.delta_max)
-                            xvar[:, idx_f + 1] = kinetic_bicycle(
-                                xvar[:, idx_f], uvar[:, idx_f], self.timestep
-                            )
+                            uvar[U_ID["accel"], idx_f] = np.clip(uvar[U_ID["accel"], idx_f], ACCEL_MIN, ACCEL_MAX)
+                            uvar[U_ID["delta"], idx_f] = np.clip(uvar[U_ID["delta"], idx_f], DELTA_MIN, DELTA_MAX)
+                            xvar[:, idx_f + 1] = kinetic_bicycle(xvar[:,idx_f],uvar[:,idx_f], self.timestep)
                             dX[:, idx_f + 1] = xvar[:, idx_f + 1] - x_track.T
                             l_state = (
                                 (xvar[:, idx_f] - x_track).T
@@ -396,7 +394,6 @@ class iLqr(ControlBase):
                             self.num_horizon,
                             matrix_k,
                             matrix_K,
-                            self.system_param
                         )
                         if cost_new < cost:
                             uvar = uvar_new
@@ -409,7 +406,7 @@ class iLqr(ControlBase):
                             lamb *= lamb_factor
                             if lamb > max_lamb:
                                 break
-                    if np.linalg.norm([xvar[:, -1] - x_terminal]) <= 0.5:
+                    if np.linalg.norm([xvar[:, -1]-x_terminal]) <= 0.5:
                         cost_iter = cost_terminal + num_horizon
                     else:
                         cost_iter = float("Inf")
@@ -418,11 +415,11 @@ class iLqr(ControlBase):
                     xvar[:, -1] = x_next
                     uvar[:, 0] = self.u_old[:, 0]
                     # check for feasibility and store the solution
-                    if np.linalg.norm([x_next[0:3] - x_terminal[0:3]]) <= 0.5:
-                        cost_iter = 1 + cost_terminal
-                    else:
-                        cost_iter = float("Inf")
-
+                    if np.linalg.norm([x_next[:]-x_terminal[:]]) <= 0.5:
+                        cost_iter = 1 + cost_terminal 
+                    else: 
+                        cost_iter = float('Inf')
+                
                 # Store the cost and solution associated with xf. From these solution we will pick and apply the best one
                 cost_list.append(deepcopy(cost_iter))
                 print("cost list", cost_list)
@@ -431,6 +428,7 @@ class iLqr(ControlBase):
                 x_pred.append(deepcopy(xvar))
                 u_pred.append(deepcopy(uvar))
                 x_terminal_list.append(deepcopy(x_terminal))
+
             # Pick the best trajectory among the feasible ones
             bestTime = cost_list.index(min(cost_list))
             # print('optimal cost selected',costList[bestTime])
@@ -438,12 +436,16 @@ class iLqr(ControlBase):
             xvar_optimal = x_pred[bestTime]
             xf_optimal = x_terminal_list[bestTime]
 
-            deltaTimer = (datetime.datetime.now() - startTimer).total_seconds()
-            print("time to solve:{}".format(deltaTimer))
+            
 
             self.u = uvar_optimal[:, 0]
-            if self.num_horizon > 1:
+            self.u[U_ID["accel"]] = np.clip(self.u[0], ACCEL_MIN, ACCEL_MAX)
+            self.u[U_ID["delta"]] = np.clip(self.u[1], DELTA_MIN, DELTA_MAX)
+            # print('input',self.u)
+            # os.system("pause")
+            if self.num_horizon >1:
                 self.u_old = uvar_optimal[:, 1:]
+
             # for i in range(num_horizon):
             #     plt.plot(xvar_optimal[0, i], xvar_optimal[1, i], 's', color = 'black', markersize = 15)
             # plt.plot(xvar_optimal[0,-1], xvar_optimal[1,-1], 'o', color = 'black',markersize = 20)
@@ -457,6 +459,8 @@ class iLqr(ControlBase):
                     print("Horizon changes to", int(self.num_horizon))
                 else:
                     print("state information", uvar_optimal)
+                # deltaTimer = (datetime.datetime.now() - startTimer).total_seconds()
+                # print("time to solve:{}".format(deltaTimer))
                 break
         self.time += self.timestep
 
@@ -561,7 +565,7 @@ class LMPC(ControlBase):
                 x_terminal = self.ss[id][:, id_point]
                 cost_terminal = self.Qfun[id][id_point]
                 self.x_sol, self.u_sol, cost = nlmpc(
-                    self.x,
+                    self.x.tolist(),
                     self.x_guess,
                     x_terminal,
                     self.x_sol,
@@ -690,7 +694,7 @@ class Simulator:
             # update system state
             self.robotic.forward_one_step()
             self.robotic.ctrl_policy.obstacle.update_obstacle()
-            if np.linalg.norm(self.robotic.x - self.initial_traj[:, -1]) <= 0.5:# 1e-4
+            if np.linalg.norm(self.robotic.x - self.initial_traj[-1, :]) <= 0.5:# 1e-4
                 self.robotic.update_memory_post_iter()
                 self.robotic.ctrl_policy.obstacle.reset_obstacle()
                 print("iteration: {}".format(iter) + " finished")

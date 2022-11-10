@@ -194,7 +194,7 @@ def backward_pass(xvar, uvar, x_terminal, dX, lamb, num_horizon, f_x, f_u, ilqr_
         matrix_Vxx = matrix_Qxx - matrix_K[:, :, idx_b].T @ matrix_Quu @ matrix_K[:, :, idx_b]
     return matrix_k, matrix_K
 
-def forward_pass(xvar, uvar, x_terminal, ilqr_param, timestep, num_horizon, matrix_k, matrix_K, sys_param):
+def forward_pass(xvar, uvar, x_terminal, ilqr_param, timestep, num_horizon, matrix_k, matrix_K):
     xvar_new = np.zeros((X_DIM, num_horizon + 1))
     xvar_new[:, 0] = xvar[:, 0]
     uvar_new = np.zeros((U_DIM, num_horizon))
@@ -203,8 +203,8 @@ def forward_pass(xvar, uvar, x_terminal, ilqr_param, timestep, num_horizon, matr
         uvar_new[:, idx_f] = (
             uvar[:, idx_f] + matrix_k[:, idx_f] + matrix_K[:, :, idx_f] @ (xvar_new[:, idx_f] - xvar[:, idx_f])
         )
-        uvar_new[U_ID["accel"],idx_f] = np.clip(uvar_new[U_ID["accel"], idx_f], -sys_param.a_max, sys_param.a_max)
-        uvar_new[U_ID["delta"],idx_f] = np.clip(uvar_new[U_ID["delta"], idx_f], -sys_param.delta_max, sys_param.delta_max)
+        uvar_new[0, idx_f] = np.clip(uvar_new[0, idx_f], ACCEL_MIN, ACCEL_MAX)
+        uvar_new[1, idx_f] = np.clip(uvar_new[1, idx_f], DELTA_MIN, DELTA_MAX)
         xvar_new[:, idx_f + 1] = kinetic_bicycle(xvar_new[:,idx_f], uvar_new[:,idx_f], timestep)
         l_state_temp = (xvar_new[:, idx_f] - x_terminal).T @ ilqr_param.matrix_Q @ (xvar_new[:, idx_f] - x_terminal)
         l_ctrl_temp = uvar_new[:, idx_f].T @ ilqr_param.matrix_R @ uvar_new[:, idx_f]
