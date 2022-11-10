@@ -53,7 +53,9 @@ Run
 ```
 python iterative_ilqr/tests/ilqr_test.py --lap-number 5 --num-ss-iters 1 --num-ss-points 8
 ```
-This allows to test the nonlinear lmpc controller. The argparse arguments are listed as follow,
+
+This allows to test the iterative ilqr controller. The argparse arguments are listed as follow,
+
 | name | type | choices | description |
 | :---: | :---: | :---: | :---: |
 | `lap_number` | int | any number that is greater than `2` | number of laps that will be simulated |

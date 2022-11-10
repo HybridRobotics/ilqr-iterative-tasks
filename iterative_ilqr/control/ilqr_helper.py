@@ -22,14 +22,15 @@ def get_cost_derivation(
     l_x = np.zeros((4, num_horizon))
     l_xx = np.zeros((4, 4, num_horizon))
     # obstacle avoidance
-    safety_margin = ilqr_param.safety_margin
-    q1 = ilqr_param.tuning_obs_q1
-    q2 = ilqr_param.tuning_obs_q2
-    # parameters of the obstacle
-    xposition = obstacle.x
-    yposition = obstacle.y
-    a = obstacle.width
-    b = obstacle.height
+    if obstacle is not None:
+        safety_margin = ilqr_param.safety_margin
+        q1 = ilqr_param.tuning_obs_q1
+        q2 = ilqr_param.tuning_obs_q2
+        # parameters of the obstacle
+        xposition = obstacle.x
+        yposition = obstacle.y
+        a = obstacle.width
+        b = obstacle.height
     for i in range(num_horizon):
         b_dot_ctrl, b_ddot_ctrl = add_control_constraint(ctrl_U[:, i], ilqr_param)
         l_u_i = (2 * ilqr_param.matrix_R @ ctrl_U[:, i]).reshape(2, 1) + b_dot_ctrl
@@ -37,22 +38,23 @@ def get_cost_derivation(
         l_x_i = (2 * ilqr_param.matrix_Q @ dX[:, i]).reshape(4, 1) 
         l_xx_i = 2 * ilqr_param.matrix_Q 
         # calculate control barrier functions for each obstacle at timestep
-        degree = 2
-        diffz = (
-            xvar[0, i]
-            -  xposition
-        )
-        diffy = xvar[1, i] - yposition
-        matrix_P1 = np.diag(
-            [1 / (a ** degree), 1 / (b ** degree),0,0]
-        )
-        diff = np.array([diffz, diffy, 0, 0]).reshape(-1, 1)
-        h = 1 + safety_margin - diff.T @ matrix_P1 @ diff
-        h_dot = -2 * matrix_P1 @ diff
-        _, b_dot_obs, b_ddot_obs = repelling_cost_function(q1, q2, h, h_dot)
-        _, b_dot_obs, b_ddot_obs = repelling_cost_function(q1, q2, h, h_dot)
-        l_x_i += b_dot_obs
-        l_xx_i += b_ddot_obs
+        if obstacle is not None:
+            degree = 2
+            diffz = (
+                xvar[0, i]
+                -  xposition
+            )
+            diffy = xvar[1, i] - yposition
+            matrix_P1 = np.diag(
+                [1 / (a ** degree), 1 / (b ** degree),0,0]
+            )   
+            diff = np.array([diffz, diffy, 0, 0]).reshape(-1, 1)
+            h = 1 + safety_margin - diff.T @ matrix_P1 @ diff
+            h_dot = -2 * matrix_P1 @ diff
+            _, b_dot_obs, b_ddot_obs = repelling_cost_function(q1, q2, h, h_dot)
+            _, b_dot_obs, b_ddot_obs = repelling_cost_function(q1, q2, h, h_dot)
+            l_x_i += b_dot_obs
+            l_xx_i += b_ddot_obs
         l_u[:, i] = l_u_i.squeeze()
         l_uu[:, :, i] = l_uu_i.squeeze()
         l_xx[:, :, i] = l_xx_i.squeeze()
@@ -92,10 +94,10 @@ def add_state_constraint(x, ilqr_param):
     q1 = ilqr_param.tuning_state_q1
     q2 = ilqr_param.tuning_state_q2
     # Add state barrier max
-    c = np.matmul(x.T, matrix_P1) - VITESSE_MAX
+    c = np.matmul(x.T, matrix_P1) - VELOCITY_MAX
     _, b_dot_1, b_ddot_1 = repelling_cost_function(q1, q2, c, matrix_P1)
     # Add state barrier min
-    c = VITESSE_MIN - np.matmul(x.T, matrix_P1)
+    c = VELOCITY_MIN - np.matmul(x.T, matrix_P1)
     _, b_dot_2, b_ddot_2 = repelling_cost_function(q1, q2, c, -matrix_P1)
     b_dot_state = b_dot_1 + b_dot_2
     b_ddot_state = b_ddot_1 + b_ddot_2
@@ -192,7 +194,7 @@ def backward_pass(xvar, uvar, x_terminal, dX, lamb, num_horizon, f_x, f_u, ilqr_
         matrix_Vxx = matrix_Qxx - matrix_K[:, :, idx_b].T @ matrix_Quu @ matrix_K[:, :, idx_b]
     return matrix_k, matrix_K
 
-def forward_pass(xvar, uvar, x_terminal, ilqr_param, timestep, num_horizon, matrix_k, matrix_K):
+def forward_pass(xvar, uvar, x_terminal, ilqr_param, timestep, num_horizon, matrix_k, matrix_K, sys_param):
     xvar_new = np.zeros((X_DIM, num_horizon + 1))
     xvar_new[:, 0] = xvar[:, 0]
     uvar_new = np.zeros((U_DIM, num_horizon))
@@ -201,6 +203,8 @@ def forward_pass(xvar, uvar, x_terminal, ilqr_param, timestep, num_horizon, matr
         uvar_new[:, idx_f] = (
             uvar[:, idx_f] + matrix_k[:, idx_f] + matrix_K[:, :, idx_f] @ (xvar_new[:, idx_f] - xvar[:, idx_f])
         )
+        uvar_new[U_ID["accel"],idx_f] = np.clip(uvar_new[U_ID["accel"], idx_f], -sys_param.a_max, sys_param.a_max)
+        uvar_new[U_ID["delta"],idx_f] = np.clip(uvar_new[U_ID["delta"], idx_f], -sys_param.delta_max, sys_param.delta_max)
         xvar_new[:, idx_f + 1] = kinetic_bicycle(xvar_new[:,idx_f], uvar_new[:,idx_f], timestep)
         l_state_temp = (xvar_new[:, idx_f] - x_terminal).T @ ilqr_param.matrix_Q @ (xvar_new[:, idx_f] - x_terminal)
         l_ctrl_temp = uvar_new[:, idx_f].T @ ilqr_param.matrix_R @ uvar_new[:, idx_f]
