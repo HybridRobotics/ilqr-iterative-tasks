@@ -10,7 +10,6 @@ from control.ilqr_helper import *
 import matplotlib.pyplot as plt
 import control.ilqr_helper
 
-
 class KineticBicycleParam:
     def __init__(self, delta_max=np.pi / 2, a_max=2.0, v_max=10, v_min=0):
         self.delta_max = delta_max
@@ -18,23 +17,30 @@ class KineticBicycleParam:
         self.v_max = v_max
         self.v_min = v_min
 
-
 class Obstacle:
-    def __init__(self, x, y, width, height):
-        self.x = x
-        self.y = y
+    def __init__(self, x, y, width, height, spd=None, timestep=None):
+        self.x0 = self.x = x
+        self.y0 = self.y = y
         self.width = width
         self.height = height
+        self.spd = spd
+        self.timestep = timestep
 
     def plot_obstacle(self):
         x_obs = []
         y_obs = []
-        plotting_resolution = 1000
-        for index in np.linspace(0, 2 * np.pi, plotting_resolution):
-            x_obs.append(self.x + self.width * np.cos(index))
-            y_obs.append(self.y + self.height * np.sin(index))
-        plt.plot(x_obs, y_obs, "-k", label="Obstacle")
-
+        for index in np.linspace(0,2*np.pi,1000):
+            x_obs.append(self.x + self.width*np.cos(index))
+            y_obs.append(self.y + self.height*np.sin(index))
+        plt.plot(x_obs, y_obs, '-k', label="Obstacle")
+    
+    def update_obstacle(self):
+        if self.spd is not None:
+            self.x += self.spd*self.timestep 
+    
+    def reset_obstacle(self):
+        self.x = self.x0
+        self.y = self.y0
 
 class KineticBicycle:
     def __init__(self, system_param=None):
@@ -170,7 +176,6 @@ class ControlBase:
 
     def get_input(self):
         return self.u
-
 
 class iLqrParam:
     def __init__(
@@ -426,7 +431,6 @@ class iLqr(ControlBase):
                 x_pred.append(deepcopy(xvar))
                 u_pred.append(deepcopy(uvar))
                 x_terminal_list.append(deepcopy(x_terminal))
-
             # Pick the best trajectory among the feasible ones
             bestTime = cost_list.index(min(cost_list))
             # print('optimal cost selected',costList[bestTime])
@@ -440,7 +444,6 @@ class iLqr(ControlBase):
             self.u = uvar_optimal[:, 0]
             if self.num_horizon > 1:
                 self.u_old = uvar_optimal[:, 1:]
-
             # for i in range(num_horizon):
             #     plt.plot(xvar_optimal[0, i], xvar_optimal[1, i], 's', color = 'black', markersize = 15)
             # plt.plot(xvar_optimal[0,-1], xvar_optimal[1,-1], 'o', color = 'black',markersize = 20)
@@ -558,7 +561,7 @@ class LMPC(ControlBase):
                 x_terminal = self.ss[id][:, id_point]
                 cost_terminal = self.Qfun[id][id_point]
                 self.x_sol, self.u_sol, cost = nlmpc(
-                    self.x.tolist(),
+                    self.x,
                     self.x_guess,
                     x_terminal,
                     self.x_sol,
@@ -686,8 +689,10 @@ class Simulator:
         for i in range(0, int(sim_time / self.timestep)):
             # update system state
             self.robotic.forward_one_step()
-            if np.linalg.norm(self.robotic.x - self.initial_traj[-1, :]) <= 0.5:  # 1e-4
+            self.robotic.ctrl_policy.obstacle.update_obstacle()
+            if np.linalg.norm(self.robotic.x - self.initial_traj[:, -1]) <= 0.5:# 1e-4
                 self.robotic.update_memory_post_iter()
+                self.robotic.ctrl_policy.obstacle.reset_obstacle()
                 print("iteration: {}".format(iter) + " finished")
                 break
 

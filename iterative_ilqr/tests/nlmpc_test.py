@@ -32,6 +32,8 @@ def nlmpc_test(args):
     width_obs = 8
     height_obs = 6
     obstacle = base.Obstacle(x_obs, y_obs, width_obs, height_obs)
+    obs_spd = 0.01
+    obstacle = base.Obstacle(x_obs, y_obs, width_obs, height_obs, spd=obs_spd, timestep=dt)   
     lmpc_param = base.LMPCParam(
         num_ss_points=num_ss_points,
         num_ss_iter=num_ss_iter,
