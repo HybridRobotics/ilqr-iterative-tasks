@@ -25,22 +25,32 @@ class Obstacle:
         self.height = height
         self.spd = spd
         self.timestep = timestep
+        self.data = {}
+        self.data["state"] = []
+        self.states = np.array([self.x0, self.y0])
 
     def plot_obstacle(self):
-        x_obs = []
-        y_obs = []
-        for index in np.linspace(0,2*np.pi,1000):
-            x_obs.append(self.x + self.width*np.cos(index))
-            y_obs.append(self.y + self.height*np.sin(index))
-        plt.plot(x_obs, y_obs, '-k', label="Obstacle")
+        count = 0
+        for data in self.data["state"][-1]:
+            x_obs = []
+            y_obs = []
+            for index in np.linspace(0,2*np.pi,1000):
+                x_obs.append(data[0] + self.width*np.cos(index))
+                y_obs.append(data[1] + self.height*np.sin(index))
+            if count % 5 ==0:
+                plt.plot(x_obs, y_obs, '-k', label="Obstacle", linewidth=5, alpha=1-count/40)
+            count += 1
     
     def update_obstacle(self):
         if self.spd is not None:
             self.x += self.spd*self.timestep 
+        self.states = np.vstack((self.states,[self.x, self.y]))            
     
     def reset_obstacle(self):
         self.x = self.x0
         self.y = self.y0
+        self.data["state"].append(self.states)
+        self.states = np.array([self.x0, self.y0])
 
 class KineticBicycle:
     def __init__(self, system_param=None):
@@ -99,9 +109,9 @@ class KineticBicycle:
                 u[U_ID["delta"]] = 0
             xcl = np.vstack((xcl, kinetic_bicycle(xcl if i == 0 else xcl[-1, :], u, self.timestep)))
             ucl = u if ucl is None else np.vstack((ucl, u))
-        np.savetxt("data/closed_loop_feasible.txt", xcl, fmt="%f")
-        self.xcl = xcl
-        self.ucl = ucl
+        np.savetxt("data/closed_loop_feasible.txt", xcl[:-1,:], fmt="%f")
+        self.xcl = xcl[:-1,:]
+        self.ucl = ucl[:-1,:]
 
     def set_ctrl_policy(self, ctrl_policy):
         self.ctrl_policy = ctrl_policy
@@ -564,6 +574,10 @@ class LMPC(ControlBase):
             for id_point in index_ss_points:
                 x_terminal = self.ss[id][:, id_point]
                 cost_terminal = self.Qfun[id][id_point]
+                # print('x guess', self.x_guess)
+                # print('xsol',self.x_sol)
+                # print('usol',self.u_sol)
+                # os.system("pause")
                 self.x_sol, self.u_sol, cost = nlmpc(
                     self.x.tolist(),
                     self.x_guess,
@@ -577,6 +591,9 @@ class LMPC(ControlBase):
                     self.system_param,
                     self.obstacle,
                 )
+                # print('current state', self.x)
+                # print('terminal state', x_terminal)
+                
                 cost_iter.append(cost)
                 input_iter.append(self.u_sol[:, 0])
                 x_pred_iter.append(self.x_sol)
@@ -693,10 +710,12 @@ class Simulator:
         for i in range(0, int(sim_time / self.timestep)):
             # update system state
             self.robotic.forward_one_step()
-            self.robotic.ctrl_policy.obstacle.update_obstacle()
+            if self.robotic.ctrl_policy.obstacle is not None:
+                self.robotic.ctrl_policy.obstacle.update_obstacle()
             if np.linalg.norm(self.robotic.x - self.initial_traj[-1, :]) <= 0.5:# 1e-4
                 self.robotic.update_memory_post_iter()
-                self.robotic.ctrl_policy.obstacle.reset_obstacle()
+                if self.robotic.ctrl_policy.obstacle is not None:
+                    self.robotic.ctrl_policy.obstacle.reset_obstacle()
                 print("iteration: {}".format(iter) + " finished")
                 break
 
@@ -721,7 +740,6 @@ class Simulator:
     def plot_simulation(self):
         list_states = self.robotic.data["state"][-1]
         fig, ax = plt.subplots()
-        self.robotic.ctrl_policy.obstacle.plot_obstacle()
         (line1,) = ax.plot(
             list_states[:, X_ID["x"]],
             list_states[:, X_ID["y"]],
@@ -732,5 +750,8 @@ class Simulator:
             self.robotic.xcl[:, X_ID["y"]],
             label="initial trajectory",
         )
+        if self.robotic.ctrl_policy.obstacle is not None:
+            self.robotic.ctrl_policy.obstacle.plot_obstacle()
+        ax.axis('equal')
         plt.legend(handles=[line1, line2])
         plt.show()

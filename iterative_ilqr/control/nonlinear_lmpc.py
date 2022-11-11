@@ -58,7 +58,7 @@ def nlmpc(
                         ((X[X_DIM * i + 0] - obstacle.x) ** 2 / (obstacle.width**2))
                         + ((X[X_DIM * i + 1] - obstacle.y) ** 2 / (obstacle.height**2))
                         - slack_obs[i - 1],
-                    )               
+                    )  
             constraint = vertcat(
                 constraint,
                 X[X_DIM * num_horizon : X_DIM * (num_horizon + 1)] - x_terminal + slack,
@@ -86,17 +86,17 @@ def nlmpc(
                 lbx = (
                     x
                     + [-1000] * (X_DIM * (num_horizon))
-                    + [-sys_param.a_max, -sys_param.delta_max] * num_horizon
+                    + [ACCEL_MIN, DELTA_MIN] * num_horizon
                     + [-1000] * X_DIM
                 )
                 ubx = (
                     x
                     + [1000] * (X_DIM * (num_horizon))
-                    + [sys_param.a_max, sys_param.delta_max] * num_horizon
+                    + [ACCEL_MAX, DELTA_MAX] * num_horizon
                     + [1000] * X_DIM
                 )
                 xGuessTot = np.concatenate((x_guess, np.zeros(X_DIM)), axis=0)
-            else:                
+            else:               
                 lbg_dyanmics = [0] * (X_DIM * num_horizon) + [0 * 1.0] * (num_horizon - 1) + [0] * X_DIM
                 ubg_dyanmics = (
                     [0] * (X_DIM * num_horizon) + [0 * 100000000] * (num_horizon - 1) + [0] * X_DIM
