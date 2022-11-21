@@ -1,3 +1,5 @@
+import pickle as pkl
+
 import numpy as np
 from utils import base
 from utils.constants_kinetic_bicycle import *
@@ -32,7 +34,7 @@ def nlmpc_test(args):
     width_obs = 8
     height_obs = 6
     obstacle = base.Obstacle(x_obs, y_obs, width_obs, height_obs)
-    obs_spd = 0.01
+    obs_spd = 0
     obstacle = base.Obstacle(x_obs, y_obs, width_obs, height_obs, spd=obs_spd, timestep=dt)   
     lmpc_param = base.LMPCParam(
         num_ss_points=num_ss_points,
@@ -62,6 +64,9 @@ def nlmpc_test(args):
     if args["plotting"]:
         simulator.plot_inputs()
         simulator.plot_simulation()
+    with open("data/ego_nlmpc_ss_"+str(num_ss_points)+"_static_obstacle.obj", "wb") as handle:
+        pkl.dump(ego, handle, protocol=pkl.HIGHEST_PROTOCOL)
+    
 
 
 if __name__ == "__main__":

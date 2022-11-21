@@ -25,34 +25,48 @@ class Obstacle:
         self.height = height
         self.spd = spd
         self.timestep = timestep
+        self.data = {}
+        self.data["state"] = []
+        self.states = np.array([self.x0, self.y0])
 
     def plot_obstacle(self):
-        x_obs = []
-        y_obs = []
-        for index in np.linspace(0,2*np.pi,1000):
-            x_obs.append(self.x + self.width*np.cos(index))
-            y_obs.append(self.y + self.height*np.sin(index))
-        plt.plot(x_obs, y_obs, '-k', label="Obstacle")
+        count = 0
+        for data in self.data["state"][-1]:
+            x_obs = []
+            y_obs = []
+            for index in np.linspace(0,2*np.pi,1000):
+                x_obs.append(data[0] + self.width*np.cos(index))
+                y_obs.append(data[1] + self.height*np.sin(index))
+            if count % 5 ==0:
+                plt.plot(x_obs, y_obs, '-k', label="Obstacle", linewidth=5, alpha=1-count/40)
+            count += 1
     
     def update_obstacle(self):
         if self.spd is not None:
             self.x += self.spd*self.timestep 
-    
+        self.states = np.vstack((self.states,[self.x, self.y]))
+        
     def reset_obstacle(self):
         self.x = self.x0
         self.y = self.y0
+        self.data["state"].append(self.states)
+        self.states = np.array([self.x0, self.y0])
 
 class KineticBicycle:
-    def __init__(self, system_param=None):
+    def __init__(self, direct_ilqr=False, system_param=None):
         self.system_param = system_param
+        self.direct_ilqr = direct_ilqr
         self.time = 0.0
+        self.delta_timer = None
+        self.feasible = None
         self.timestep = None
         self.x = None
         self.u = None
         self.zero_noise_flag = False
-        self.states, self.inputs, self.timestamps, self.solver_times = None, None, None, None
+        self.states, self.inputs, self.timestamps =  None, None, None
+        self.solver_times, self.feasibility = None, None
         data_names = {"state", "input", "timestamp"}
-        diagnostics_names = {"solver_time"}
+        diagnostics_names = {"solver_time", "feasibility"}
         self.data, self.diagnostics = {}, {}
         for data_name in data_names:
             self.data[data_name] = []
@@ -71,6 +85,8 @@ class KineticBicycle:
         self.states = x
         self.timestamps = None
         self.inputs = None
+        self.solver_times = None
+        self.feasible = None
 
     def get_traj(self):
         angle = np.pi / 6
@@ -108,8 +124,17 @@ class KineticBicycle:
 
     def calc_ctrl_input(self):
         self.ctrl_policy.set_state(self.x)
-        self.ctrl_policy.calc_input()
-        self.u = self.ctrl_policy.get_input()
+        startTimer = datetime.datetime.now()
+        try:
+            self.ctrl_policy.calc_input()
+            self.u = self.ctrl_policy.get_input()
+            self.delta_timer = (datetime.datetime.now() - startTimer).total_seconds()
+            print("time to solve:{}".format(self.delta_timer))
+            self.feasible = 1
+        except RuntimeError:
+            self.feasible = 0
+            print("solver fail to find the solution")
+
 
     def forward_one_step(self):
         self.calc_ctrl_input()
@@ -123,11 +148,17 @@ class KineticBicycle:
         self.timestamps = (
             self.time if self.timestamps is None else np.vstack((self.timestamps, self.time))
         )
+        self.solver_times = (
+            self.delta_timer if self.solver_times is None else np.vstack((self.solver_times, self.delta_timer))
+        )
+        self.feasibility = self.feasible if self.feasibility is None else np.vstack((self.feasibility, self.feasible))
 
     def update_memory_post_iter(self):
         self.data["state"].append(self.states)
         self.data["input"].append(self.inputs)
         self.data["timestamp"].append(self.timestamps)
+        self.diagnostics["solver_time"].append(self.solver_times)
+        self.diagnostics["feasibility"].append(self.feasibility)
         self.set_state(np.zeros((X_DIM,)))
 
     def forward_dynamics(self):
@@ -182,7 +213,7 @@ class iLqrParam:
         self,
         matrix_Q=0 * np.diag([0.0, 0.0, 0.0, 0.0]),
         matrix_R=0 * np.diag([1.0, 0.25]),
-        matrix_Qlamb=1 * np.diag([1.0, 1.0, 1.0, 1.0]),
+        matrix_Qlamb=1 * np.diag([1.0, 1.0, 0.8, 0.8]),
         num_ss_points=8,
         num_ss_iter=1,
         num_horizon=6,
@@ -190,9 +221,9 @@ class iLqrParam:
         tuning_state_q2=1.0,
         tuning_ctrl_q1=1.0,
         tuning_ctrl_q2=1.0,
-        tuning_obs_q1=2.25,
-        tuning_obs_q2=2.25,
-        safety_margin=0.5,
+        tuning_obs_q1=2.0,
+        tuning_obs_q2=2.0,
+        safety_margin=0.0,
         timestep=None,
         lap_number=None,
         time_ilqr=None,
@@ -246,8 +277,8 @@ class iLqr(ControlBase):
         self.matrix_Q = self.ilqr_param.matrix_Q
         self.matrix_R = self.ilqr_param.matrix_R
         self.obstacle = obstacle
-        self.max_iter = 100
-        self.eps = 1e-3
+        self.max_iter = 120
+        self.eps = 1e-4
         self.lamb = 1
         self.lamb_factor = 10
         self.max_lamb = 1000
@@ -406,7 +437,7 @@ class iLqr(ControlBase):
                             lamb *= lamb_factor
                             if lamb > max_lamb:
                                 break
-                    if np.linalg.norm([xvar[:, -1]-x_terminal]) <= 0.5:
+                    if np.linalg.norm([xvar[:, -1]-x_terminal]) <= 1.0:
                         cost_iter = cost_terminal + num_horizon
                     else:
                         cost_iter = float("Inf")
@@ -415,7 +446,7 @@ class iLqr(ControlBase):
                     xvar[:, -1] = x_next
                     uvar[:, 0] = self.u_old[:, 0]
                     # check for feasibility and store the solution
-                    if np.linalg.norm([x_next[:]-x_terminal[:]]) <= 0.5:
+                    if np.linalg.norm([x_next[:]-x_terminal[:]]) <= 1.0:
                         cost_iter = 1 + cost_terminal 
                     else: 
                         cost_iter = float('Inf')
@@ -441,8 +472,6 @@ class iLqr(ControlBase):
             self.u = uvar_optimal[:, 0]
             self.u[U_ID["accel"]] = np.clip(self.u[0], ACCEL_MIN, ACCEL_MAX)
             self.u[U_ID["delta"]] = np.clip(self.u[1], DELTA_MIN, DELTA_MAX)
-            # print('input',self.u)
-            # os.system("pause")
             if self.num_horizon >1:
                 self.u_old = uvar_optimal[:, 1:]
 
@@ -452,7 +481,7 @@ class iLqr(ControlBase):
             # plt.plot(xvar_optimal[0,0], xvar_optimal[1,0], 'o', color = 'black',markersize = 17)
             # plt.plot(xf_optimal[0],xf_optimal[1],'o', color = 'g',markersize = 10)
             # plt.show()
-            if iter == 6:
+            if iter == 3:
                 # Change time horizon length
                 if (id_list[bestTime] + 1) > (self.ss[-1].shape[1] - 1):
                     self.num_horizon = self.num_horizon - 1
@@ -463,6 +492,7 @@ class iLqr(ControlBase):
                 # print("time to solve:{}".format(deltaTimer))
                 break
         self.time += self.timestep
+         
 
 
 class LMPCParam:
@@ -693,10 +723,12 @@ class Simulator:
         for i in range(0, int(sim_time / self.timestep)):
             # update system state
             self.robotic.forward_one_step()
-            self.robotic.ctrl_policy.obstacle.update_obstacle()
-            if np.linalg.norm(self.robotic.x - self.initial_traj[-1, :]) <= 0.5:# 1e-4
+            if self.robotic.ctrl_policy.obstacle is not None:
+                self.robotic.ctrl_policy.obstacle.update_obstacle()
+            if np.linalg.norm(self.robotic.x - self.initial_traj[-1, :]) <= 1.0:# 1e-4
                 self.robotic.update_memory_post_iter()
-                self.robotic.ctrl_policy.obstacle.reset_obstacle()
+                if self.robotic.ctrl_policy.obstacle is not None:
+                    self.robotic.ctrl_policy.obstacle.reset_obstacle()
                 print("iteration: {}".format(iter) + " finished")
                 break
 
@@ -721,7 +753,7 @@ class Simulator:
     def plot_simulation(self):
         list_states = self.robotic.data["state"][-1]
         fig, ax = plt.subplots()
-        self.robotic.ctrl_policy.obstacle.plot_obstacle()
+        
         (line1,) = ax.plot(
             list_states[:, X_ID["x"]],
             list_states[:, X_ID["y"]],
@@ -732,5 +764,8 @@ class Simulator:
             self.robotic.xcl[:, X_ID["y"]],
             label="initial trajectory",
         )
+        if self.robotic.ctrl_policy.obstacle is not None:
+            self.robotic.ctrl_policy.obstacle.plot_obstacle()
+        ax.axis('equal')
         plt.legend(handles=[line1, line2])
         plt.show()
