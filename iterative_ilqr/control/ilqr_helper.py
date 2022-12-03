@@ -130,7 +130,10 @@ def add_control_constraint(u, ilqr_param):
 def get_cost_final(
     x,
     x_terminal,
-    matrix_Qlambd
+    matrix_Qlambd,
+    obstacle,
+    ilqr_param
+
 ):
     # define variables
     l_x = np.zeros((4))
@@ -138,12 +141,35 @@ def get_cost_final(
     # Add convex hull constraint as the terminal cost
     # Add state barrier max
     diff = x[:, -1] - x_terminal
-    l_x_f = (2 * matrix_Qlambd @ diff).reshape(
-        4,
-    )
+    l_x_f = (2 * matrix_Qlambd @ diff).reshape(4,1)
     l_xx_f = 2 * matrix_Qlambd
+    if obstacle is not None:
+        safety_margin = ilqr_param.safety_margin
+        q1 = ilqr_param.tuning_obs_q1
+        q2 = ilqr_param.tuning_obs_q2
+        # parameters of the obstacle
+        xposition = obstacle.x
+        yposition = obstacle.y
+        a = obstacle.width
+        b = obstacle.height
+        degree = 2
+        diffz = (
+            x[0, -1]
+            -  xposition
+        )
+        diffy = x[1, -1] - yposition
+        matrix_P1 = np.diag(
+            [1 / (a ** degree), 1 / (b ** degree),0,0]
+        )   
+        diff = np.array([diffz, diffy, 0, 0]).reshape(-1, 1)
+        h = 1 + safety_margin - diff.T @ matrix_P1 @ diff
+        h_dot = -2 * matrix_P1 @ diff
+        _, b_dot_obs, b_ddot_obs = repelling_cost_function(q1, q2, h, h_dot)
+        _, b_dot_obs, b_ddot_obs = repelling_cost_function(q1, q2, h, h_dot)
+        l_x_f += b_dot_obs
+        l_xx_f += b_ddot_obs
     l_x[:] = l_x_f.squeeze()
-    l_xx[:, :] = l_xx_f
+    l_xx[:, :] = l_xx_f.squeeze()
     return l_x, l_xx
 
 
@@ -168,7 +194,9 @@ def backward_pass(xvar, uvar, x_terminal, dX, lamb, num_horizon, f_x, f_u, ilqr_
     matrix_Vx, matrix_Vxx = get_cost_final(
         xvar,
         x_terminal,
-        ilqr_param.matrix_Qlamb
+        ilqr_param.matrix_Qlamb,
+        obstacle,
+        ilqr_param
     )
     # define control modification k and K
     matrix_K = np.zeros((U_DIM, X_DIM, num_horizon))

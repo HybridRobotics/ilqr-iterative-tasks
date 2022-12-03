@@ -1,46 +1,42 @@
 import pickle as pkl
 
-import os
 import numpy as np
 from utils import base
 from utils.constants_kinetic_bicycle import *
-from copy import deepcopy
 
 
-def test_ilqr(args):
-    if args["save_trajectory"]:
-        save_ilqr_traj = True
-    else:
-        save_ilqr_traj = False
-    if args["direct_ilqr"]:
-        direct_ilqr = True
-    else:
-        direct_ilqr = False
+def nlmpc_test(args):
     num_horizon = 6
     dt = 1
     sim_time = 50
-    ss_optioin = "spaceVarying"
     lap_number = args["lap_number"]
     num_ss_iter = args["num_ss_iters"]
     num_ss_points = args["num_ss_points"]
-    all_ss_point = False
-    all_ss_iter = False
-    x0 = [0, 0, 0, 0]
-    ego = base.KineticBicycle(direct_ilqr=direct_ilqr, system_param=base.KineticBicycleParam())
+    if args["ss_option"] == "all":
+        all_ss_point = True
+        all_ss_iter = True
+        ss_optioin = None
+    else:
+        all_ss_point = False
+        all_ss_iter = False
+        if args["ss_option"] == "space":
+            ss_optioin = "spaceVarying"
+        elif args["ss_option"] == "time":
+            ss_optioin = "timeVarying"
+    x0 = np.zeros((X_DIM,))
+    ego = base.KineticBicycle(system_param=base.KineticBicycleParam())
     ego.set_state(x0)
     ego.set_timestep(dt)
     ego.get_traj()
     ego.set_zero_noise()
     x_obs = 31
-    y_obs = -2
+    y_obs = -3
     width_obs = 8
     height_obs = 6
-    spd = 0
-    if args["direct_ilqr"]:
-        obstacle = base.Obstacle(x_obs, y_obs, width_obs, height_obs)
-    else:
-        obstacle = base.Obstacle(x_obs, y_obs, width_obs, height_obs)
-    ilqr_param = base.iLqrParam(
+    obstacle = base.Obstacle(x_obs, y_obs, width_obs, height_obs)
+    obs_spd = 0
+    obstacle = base.Obstacle(x_obs, y_obs, width_obs, height_obs, spd=obs_spd, timestep=dt)   
+    lmpc_param = base.LMPCParam(
         num_ss_points=num_ss_points,
         num_ss_iter=num_ss_iter,
         timestep=dt,
@@ -49,10 +45,10 @@ def test_ilqr(args):
         all_ss_iter=all_ss_iter,
         all_ss_point=all_ss_point,
     )
-    ilqr = base.iLqr(ilqr_param, obstacle=obstacle, system_param=base.KineticBicycleParam())
-    ilqr.add_trajectory(ego.xcl, ego.ucl)
-    ilqr.set_timestep(dt)
-    ego.set_ctrl_policy(ilqr)
+    lmpc = base.LMPC(lmpc_param, obstacle=obstacle, system_param=base.KineticBicycleParam())
+    lmpc.add_trajectory(ego.xcl, ego.ucl)
+    lmpc.set_timestep(dt)
+    ego.set_ctrl_policy(lmpc)
     simulator = base.Simulator()
     simulator.set_robotic(ego)
     simulator.set_timestep(dt)
@@ -60,8 +56,7 @@ def test_ilqr(args):
     for iter in range(lap_number):
         print("iteration ", iter, "begins")
         simulator.sim(iter, sim_time=sim_time)
-        ego.data["state"][-1] = np.vstack((ego.data["state"][-1], ego.xcl[-1,:]))
-        ilqr.add_trajectory(ego.data["state"][-1], ego.data["input"][-1])
+        lmpc.add_trajectory(ego.data["state"][-1], ego.data["input"][-1])
     print("time at iteration 0 is", len(ego.xcl) * dt, " s")
     for id in range(len(ego.data["timestamp"])):
         lap = id + 1
@@ -69,8 +64,9 @@ def test_ilqr(args):
     if args["plotting"]:
         simulator.plot_inputs()
         simulator.plot_simulation()
-    with open("data/ego_ilqr_ss_"+str(num_ss_points)+"_static_obstacle.obj", "wb") as handle:
+    with open("data/ego_nlmpc_ss_"+str(num_ss_points)+"_static_obstacle.obj", "wb") as handle:
         pkl.dump(ego, handle, protocol=pkl.HIGHEST_PROTOCOL)
+    
 
 
 if __name__ == "__main__":
@@ -79,8 +75,7 @@ if __name__ == "__main__":
     parser.add_argument("--lap-number", type=int)
     parser.add_argument("--num-ss-points", type=int)
     parser.add_argument("--num-ss-iters", type=int)
+    parser.add_argument("--ss-option", type=str)
     parser.add_argument("--plotting", action="store_true")
-    parser.add_argument("--direct-ilqr", action="store_true")
-    parser.add_argument("--save-trajectory", action="store_true")
     args = vars(parser.parse_args())
-    test_ilqr(args)
+    nlmpc_test(args)

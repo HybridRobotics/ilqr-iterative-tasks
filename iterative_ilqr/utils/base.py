@@ -9,6 +9,7 @@ from control.nonlinear_lmpc import *
 from control.ilqr_helper import *
 import matplotlib.pyplot as plt
 import control.ilqr_helper
+import pickle as pkl
 
 class KineticBicycleParam:
     def __init__(self, delta_max=np.pi / 2, a_max=2.0, v_max=10, v_min=0):
@@ -437,14 +438,19 @@ class iLqr(ControlBase):
                             lamb *= lamb_factor
                             if lamb > max_lamb:
                                 break
-                    if np.linalg.norm([xvar[:, -1]-x_terminal]) <= 1.0:
-                        cost_iter = cost_terminal + num_horizon
-                    else:
-                        cost_iter = float("Inf")
+                    for i in range(1,11):
+                        if np.linalg.norm([xvar[:, -1]-x_terminal]) <= 1.0*i:
+                            cost_iter = cost_terminal + num_horizon + 100*i
+                            break
+                        elif np.linalg.norm([xvar[:, -1]-x_terminal]) > 1.0*10:
+                            cost_iter = float("Inf")
+                            break
                 else:
                     x_next = kinetic_bicycle(self.x.tolist(), self.u_old[:, 0], self.timestep)
                     xvar[:, -1] = x_next
                     uvar[:, 0] = self.u_old[:, 0]
+                    cost_iter = 1 + cost_terminal
+                    norm = np.linalg.norm([x_next[:]-x_terminal[:]])
                     # check for feasibility and store the solution
                     if np.linalg.norm([x_next[:]-x_terminal[:]]) <= 1.0:
                         cost_iter = 1 + cost_terminal 
@@ -488,8 +494,6 @@ class iLqr(ControlBase):
                     print("Horizon changes to", int(self.num_horizon))
                 else:
                     print("state information", uvar_optimal)
-                # deltaTimer = (datetime.datetime.now() - startTimer).total_seconds()
-                # print("time to solve:{}".format(deltaTimer))
                 break
         self.time += self.timestep
          
@@ -528,7 +532,7 @@ class LMPCParam:
 
 
 class LMPC(ControlBase):
-    def __init__(self, lmpc_param, obstacle=None, system_param=None):
+    def __init__(self, lmpc_param, obstacle=None, system_param=None, ego=None):
         ControlBase.__init__(self)
         self.lmpc_param = lmpc_param
         self.system_param = system_param
@@ -548,6 +552,7 @@ class LMPC(ControlBase):
         self.cost_improve = None
         self.num_horizon = self.lmpc_param.num_horizon
         self.obstacle = obstacle
+        self.ego = ego
 
     def select_time_varying_ss(self, iter):
         selected_id = self.ss_point_selected_id[iter]
@@ -626,6 +631,8 @@ class LMPC(ControlBase):
         self.cost = cost_list[best_iter_loc_ss][best_time]
         if self.old_cost <= self.cost:
             print("ERROR: The cost is not decreasing")
+            with open("data/ego_nlmpc_ss_"+str(self.lmpc_param.num_ss_points)+"_add_static_obstacle.obj", "wb") as handle:
+                pkl.dump(self.ego, handle, protocol=pkl.HIGHEST_PROTOCOL)
             pdb.set_trace()
         self.old_iter = best_iter_loc_ss
         self.cost_improve = self.cost_improve + self.old_cost - self.cost - 1
