@@ -214,14 +214,14 @@ class iLqrParam:
         self,
         matrix_Q=0 * np.diag([0.0, 0.0, 0.0, 0.0]),
         matrix_R=0 * np.diag([1.0, 0.25]),
-        matrix_Qlamb=1 * np.diag([1.0, 1.0, 0.8, 0.8]),
+        matrix_Qlamb=2 * np.diag([1.0, 1.0, 1.2, 0.8]),
         num_ss_points=8,
         num_ss_iter=1,
         num_horizon=6,
         tuning_state_q1=1.0,
         tuning_state_q2=1.0,
-        tuning_ctrl_q1=1.0,
-        tuning_ctrl_q2=1.0,
+        tuning_ctrl_q1=1.2,
+        tuning_ctrl_q2=1.2,
         tuning_obs_q1=2.0,
         tuning_obs_q2=2.0,
         safety_margin=0.0,
@@ -366,6 +366,8 @@ class iLqr(ControlBase):
                     matrix_Qfun_selected_tot, matrix_Qfun_selected, axis=0
                 )
                 index_selected_tot.append(index_selected)
+            
+            
             for j in index_selected:
                 # define variables
                 uvar = np.zeros((U_DIM, num_horizon))
@@ -376,7 +378,20 @@ class iLqr(ControlBase):
                 dX[:, 0] = xvar[:, 0] - x_track
                 x_terminal = self.ss[-1][:, j]
                 cost_terminal = self.Qfun[-1][j]
+                # if self.num_horizon <=5:
+                    # x_terminal = self.ss[-1][:, -1]
+                    # cost_terminal = self.Qfun[-1][-1]
                 # check time horizon length
+                
+                if self.num_horizon<=5:
+                    self.ilqr_param.matrix_Qlamb=2 * np.diag([1.0, 1.0, 1.2, 0.2])
+                else:
+                    self.ilqr_param.matrix_Qlamb=2 * np.diag([1.0, 1.0, 1.2, 0.8])
+                    # self.ilqr_param.matrix_Qlamb=2 * np.diag([1.0, 1.0, 1.2, 0.5])
+                
+                
+                
+                
                 if self.num_horizon > 1:
                     # Iteration of ilqr for tracking
                     for iter_ilqr in range(self.max_iter):
@@ -438,11 +453,11 @@ class iLqr(ControlBase):
                             lamb *= lamb_factor
                             if lamb > max_lamb:
                                 break
-                    for i in range(1,11):
+                    for i in range(1,21):
                         if np.linalg.norm([xvar[:, -1]-x_terminal]) <= 1.0*i:
                             cost_iter = cost_terminal + num_horizon + 100*i
                             break
-                        elif np.linalg.norm([xvar[:, -1]-x_terminal]) > 1.0*10:
+                        elif np.linalg.norm([xvar[:, -1]-x_terminal]) > 1.0*20:
                             cost_iter = float("Inf")
                             break
                 else:
@@ -459,21 +474,30 @@ class iLqr(ControlBase):
                 
                 # Store the cost and solution associated with xf. From these solution we will pick and apply the best one
                 cost_list.append(deepcopy(cost_iter))
-                print("cost list", cost_list)
+                # print("cost list", cost_list)
                 u_list.append(deepcopy(uvar[:, 0]))
                 id_list.append(deepcopy(j))
                 x_pred.append(deepcopy(xvar))
                 u_pred.append(deepcopy(uvar))
                 x_terminal_list.append(deepcopy(x_terminal))
-
+            
+            
             # Pick the best trajectory among the feasible ones
             bestTime = cost_list.index(min(cost_list))
             # print('optimal cost selected',costList[bestTime])
             uvar_optimal = u_pred[bestTime]
             xvar_optimal = x_pred[bestTime]
             xf_optimal = x_terminal_list[bestTime]
-
-            
+            # if num_horizon<=5:
+            #     print(xf_optimal)
+            #     os.system("pause")
+            print('index selected tot', index_selected_tot)
+            print('best index', id_list[bestTime])
+            # print('x target',xf_optimal)
+            # print('x pred',xvar_optimal[:,-1])
+            # print('difference', np.linalg.norm(xf_optimal-xvar_optimal[:,-1]))
+            # print('x',xvar_optimal[:,0])
+            os.system("pause")
 
             self.u = uvar_optimal[:, 0]
             self.u[U_ID["accel"]] = np.clip(self.u[0], ACCEL_MIN, ACCEL_MAX)
@@ -481,19 +505,21 @@ class iLqr(ControlBase):
             if self.num_horizon >1:
                 self.u_old = uvar_optimal[:, 1:]
 
-            # for i in range(num_horizon):
+            # for i in range(num_horizon+1):
             #     plt.plot(xvar_optimal[0, i], xvar_optimal[1, i], 's', color = 'black', markersize = 15)
             # plt.plot(xvar_optimal[0,-1], xvar_optimal[1,-1], 'o', color = 'black',markersize = 20)
             # plt.plot(xvar_optimal[0,0], xvar_optimal[1,0], 'o', color = 'black',markersize = 17)
             # plt.plot(xf_optimal[0],xf_optimal[1],'o', color = 'g',markersize = 10)
             # plt.show()
-            if iter == 3:
+            if iter == 4 :
                 # Change time horizon length
                 if (id_list[bestTime] + 1) > (self.ss[-1].shape[1] - 1):
                     self.num_horizon = self.num_horizon - 1
                     print("Horizon changes to", int(self.num_horizon))
                 else:
-                    print("state information", uvar_optimal)
+                    print("target information", xf_optimal)
+                    print("real state information", xvar_optimal[:,-1])
+                    print("control input", self.u)
                 break
         self.time += self.timestep
          
@@ -508,7 +534,7 @@ class LMPCParam:
         matrix_dR=5 * np.diag([0.8, 0.0]),
         num_ss_points=8,
         num_ss_iter=1,
-        num_horizon=6,
+        num_horizon=20,
         timestep=None,
         lap_number=None,
         time_lmpc=None,
@@ -596,6 +622,9 @@ class LMPC(ControlBase):
             input_iter = []
             x_pred_iter = []
             u_pred_iter = []
+            
+            
+            
             for id_point in index_ss_points:
                 x_terminal = self.ss[id][:, id_point]
                 cost_terminal = self.Qfun[id][id_point]
@@ -629,11 +658,12 @@ class LMPC(ControlBase):
         self.x_pred = x_pred[best_iter_loc_ss][best_time]
         self.u_pred = u_pred[best_iter_loc_ss][best_time]
         self.cost = cost_list[best_iter_loc_ss][best_time]
-        if self.old_cost <= self.cost:
-            print("ERROR: The cost is not decreasing")
-            with open("data/ego_nlmpc_ss_"+str(self.lmpc_param.num_ss_points)+"_add_static_obstacle.obj", "wb") as handle:
-                pkl.dump(self.ego, handle, protocol=pkl.HIGHEST_PROTOCOL)
-            pdb.set_trace()
+        print('index ss points',index_ss_points)
+        # if self.old_cost <= self.cost:
+        #     print("ERROR: The cost is not decreasing")
+        #     with open("data/ego_nlmpc_ss_"+str(self.lmpc_param.num_ss_points)+"_add_static_obstacle.obj", "wb") as handle:
+        #         pkl.dump(self.ego, handle, protocol=pkl.HIGHEST_PROTOCOL)
+        #     pdb.set_trace()
         self.old_iter = best_iter_loc_ss
         self.cost_improve = self.cost_improve + self.old_cost - self.cost - 1
         self.old_cost = self.cost

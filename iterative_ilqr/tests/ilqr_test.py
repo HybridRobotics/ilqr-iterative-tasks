@@ -8,10 +8,7 @@ from copy import deepcopy
 
 
 def test_ilqr(args):
-    if args["save_trajectory"]:
-        save_ilqr_traj = True
-    else:
-        save_ilqr_traj = False
+    
     if args["direct_ilqr"]:
         direct_ilqr = True
     else:
@@ -69,9 +66,6 @@ def test_ilqr(args):
     if args["plotting"]:
         simulator.plot_inputs()
         simulator.plot_simulation()
-    with open("data/ego_ilqr_ss_"+str(num_ss_points)+"_static_obstacle.obj", "wb") as handle:
-        pkl.dump(ego, handle, protocol=pkl.HIGHEST_PROTOCOL)
-
 
 if __name__ == "__main__":
     import argparse

@@ -7,7 +7,7 @@ from utils.constants_kinetic_bicycle import *
 
 def nlmpc_test(args):
     num_horizon = 6
-    dt = 1
+    dt = 0.1
     sim_time = 50
     lap_number = args["lap_number"]
     num_ss_iter = args["num_ss_iters"]
@@ -64,8 +64,6 @@ def nlmpc_test(args):
     if args["plotting"]:
         simulator.plot_inputs()
         simulator.plot_simulation()
-    with open("data/ego_nlmpc_ss_"+str(num_ss_points)+"_static_obstacle.obj", "wb") as handle:
-        pkl.dump(ego, handle, protocol=pkl.HIGHEST_PROTOCOL)
     
 
 
