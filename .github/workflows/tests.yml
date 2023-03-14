@@ -7,8 +7,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest]
-        python-version: ['3.6']
+        os: [ubuntu-18.04]
+        python-version: ['3.6.7']
 
     steps:
     - uses: actions/checkout@v3
@@ -26,3 +26,6 @@ jobs:
     - name: Test nonlinear lmpc controller with pytest
       run:
         pytest tests/nlmpc_test.py --doctest-modules
+    - name: Test i2lqr controller with pytest
+      run:
+        pytest tests/ilqr_test.py --doctest-modules
