@@ -49,7 +49,7 @@ def test_ilqr(ss_option):
     for iter in range(lap_number):
         print("iteration ", iter, "begins")
         simulator.sim(iter, sim_time=sim_time)
-        ego.data["state"][-1] = np.vstack((ego.data["state"][-1], ego.xcl[-1,:]))
+        ego.data["state"][-1] = np.vstack((ego.data["state"][-1], ego.xcl[-1, :]))
         ilqr.add_trajectory(ego.data["state"][-1], ego.data["input"][-1])
     print("time at iteration 0 is", len(ego.xcl) * dt, " s")
     for id in range(len(ego.data["timestamp"])):

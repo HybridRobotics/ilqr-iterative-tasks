@@ -1,7 +1,6 @@
 import numpy as np
 import datetime
 import os
-import pdb
 from copy import deepcopy
 from utils.constants_kinetic_bicycle import *
 from systems.kinetic_bicycle import *
@@ -11,6 +10,7 @@ from control.ilqr_helper import *
 import matplotlib.pyplot as plt
 import pickle as pkl
 
+
 class KineticBicycleParam:
     def __init__(self, delta_max=np.pi / 2, a_max=2.0, v_max=10, v_min=0):
         self.delta_max = delta_max
@@ -18,8 +18,9 @@ class KineticBicycleParam:
         self.v_max = v_max
         self.v_min = v_min
 
+
 class Obstacle:
-    def __init__(self, x, y, width, height, spd=None, timestep=None, moving_option = None):
+    def __init__(self, x, y, width, height, spd=None, timestep=None, moving_option=None):
         self.x0 = self.x = x
         self.y0 = self.y = y
         self.width = width
@@ -29,35 +30,36 @@ class Obstacle:
         self.data = {}
         self.data["state"] = []
         self.states = np.array([self.x0, self.y0])
-        self.moving_option = moving_option # 1: moving upwards # 2: moving towards left
+        self.moving_option = moving_option  # 1: moving upwards # 2: moving towards left
 
     def plot_obstacle(self):
         count = 0
         for data in self.data["state"][-1]:
             x_obs = []
             y_obs = []
-            for index in np.linspace(0,2*np.pi,1000):
-                x_obs.append(data[0] + self.width*np.cos(index))
-                y_obs.append(data[1] + self.height*np.sin(index))
-            if count % 5 ==0:
-                plt.plot(x_obs, y_obs, '-k', label="Obstacle", linewidth=5, alpha=1-count/90)
+            for index in np.linspace(0, 2 * np.pi, 1000):
+                x_obs.append(data[0] + self.width * np.cos(index))
+                y_obs.append(data[1] + self.height * np.sin(index))
+            if count % 5 == 0:
+                plt.plot(x_obs, y_obs, "-k", label="Obstacle", linewidth=5, alpha=1 - count / 90)
             count += 1
-    
+
     def update_obstacle(self):
         if self.spd is not None:
             if self.spd == 0:
                 pass
             if self.moving_option == 1:
-                self.y += self.spd*self.timestep 
+                self.y += self.spd * self.timestep
             if self.moving_option == 2:
-                self.x -= self.spd*self.timestep
-        self.states = np.vstack((self.states,[self.x, self.y]))
-        
+                self.x -= self.spd * self.timestep
+        self.states = np.vstack((self.states, [self.x, self.y]))
+
     def reset_obstacle(self):
         self.x = self.x0
         self.y = self.y0
         self.data["state"].append(self.states)
         self.states = np.array([self.x0, self.y0])
+
 
 class KineticBicycle:
     def __init__(self, direct_ilqr=False, system_param=None):
@@ -70,7 +72,7 @@ class KineticBicycle:
         self.x = None
         self.u = None
         self.zero_noise_flag = False
-        self.states, self.inputs, self.timestamps =  None, None, None
+        self.states, self.inputs, self.timestamps = None, None, None
         self.solver_times, self.feasibility = None, None
         data_names = {"state", "input", "timestamp"}
         diagnostics_names = {"solver_time", "feasibility"}
@@ -121,14 +123,16 @@ class KineticBicycle:
                     u[U_ID["delta"]] = -angle
                 else:
                     u[U_ID["delta"]] = 0
-                xcl = np.vstack((xcl, kinetic_bicycle(xcl if i == 0 else xcl[-1, :], u, self.timestep)))
+                xcl = np.vstack(
+                    (xcl, kinetic_bicycle(xcl if i == 0 else xcl[-1, :], u, self.timestep))
+                )
                 ucl = u if ucl is None else np.vstack((ucl, u))
             np.savetxt("data/closed_loop_feasible.txt", xcl, fmt="%f")
             self.xcl = xcl
             self.ucl = ucl
         else:
-            xcl = np.loadtxt('data/closed_loop_multi_laps.txt')
-            ucl = np.loadtxt('data/input_multi_laps.txt')
+            xcl = np.loadtxt("data/closed_loop_multi_laps.txt")
+            ucl = np.loadtxt("data/input_multi_laps.txt")
         self.xcl = xcl
         self.ucl = ucl
 
@@ -138,19 +142,18 @@ class KineticBicycle:
     def calc_ctrl_input(self):
         self.ctrl_policy.set_state(self.x)
         startTimer = datetime.datetime.now()
-        
+
         try:
-            
+
             self.ctrl_policy.calc_input()
             self.u = self.ctrl_policy.get_input()
             self.delta_timer = (datetime.datetime.now() - startTimer).total_seconds()
             print("time to solve:{}".format(self.delta_timer))
             self.feasible = 1
-            
+
         except RuntimeError:
             self.feasible = 0
             print("solver fail to find the solution")
-
 
     def forward_one_step(self):
         self.calc_ctrl_input()
@@ -164,15 +167,25 @@ class KineticBicycle:
         self.timestamps = (
             self.time if self.timestamps is None else np.vstack((self.timestamps, self.time))
         )
-        
-        if self.timestamps is not None and type(self.timestamps) is not float and len(self.timestamps) >= 121:
-            with open("data/ego_nlmpc_ss_"+str(8)+"_add_static_obstacle.obj", "wb") as handle:
+
+        if (
+            self.timestamps is not None
+            and type(self.timestamps) is not float
+            and len(self.timestamps) >= 121
+        ):
+            with open("data/ego_nlmpc_ss_" + str(8) + "_add_static_obstacle.obj", "wb") as handle:
                 pkl.dump(self, handle, protocol=pkl.HIGHEST_PROTOCOL)
-        
+
         self.solver_times = (
-            self.delta_timer if self.solver_times is None else np.vstack((self.solver_times, self.delta_timer))
+            self.delta_timer
+            if self.solver_times is None
+            else np.vstack((self.solver_times, self.delta_timer))
         )
-        self.feasibility = self.feasible if self.feasibility is None else np.vstack((self.feasibility, self.feasible))
+        self.feasibility = (
+            self.feasible
+            if self.feasibility is None
+            else np.vstack((self.feasibility, self.feasible))
+        )
 
     def update_memory_post_iter(self):
         self.data["state"].append(self.states)
@@ -229,9 +242,11 @@ class ControlBase:
     def get_input(self):
         return self.u
 
+
 # obs_q1, obs_q2 2.05 for static obstacle, add static obstacle
 # obs_q1, obs_q2 2.74 for add moving obstacle with option 1
 # safety_margin = 0
+
 
 class iLqrParam:
     def __init__(
@@ -275,7 +290,7 @@ class iLqrParam:
         self.tuning_ctrl_q2 = tuning_ctrl_q2
         self.tuning_obs_q1 = tuning_obs_q1
         self.tuning_obs_q2 = tuning_obs_q2
-        
+
         self.safety_margin = safety_margin
 
 
@@ -310,10 +325,10 @@ class iLqr(ControlBase):
         self.lamb_factor = 10
         self.max_lamb = 1000
 
-    def select_close_ss(self, iter,x0):
+    def select_close_ss(self, iter, x0):
         x = self.ss[iter]
-        one_vec = np.ones((x.shape[1],1))
-        terminal_guess_vec = (np.dot(np.array([x0]).T, one_vec.T))
+        one_vec = np.ones((x.shape[1], 1))
+        terminal_guess_vec = np.dot(np.array([x0]).T, one_vec.T)
         diff = x - terminal_guess_vec
         norm = la.norm(np.array(diff), 1, axis=0)
         index_min_norm = np.argsort(norm)
@@ -361,10 +376,10 @@ class iLqr(ControlBase):
         min_iter = np.max([0, self.iter - self.ilqr_param.num_ss_iter])
         if self.num_horizon < 6:
             uvar_optimal = self.u_old
-            self.u = uvar_optimal[:,0]
-            self.u_old = uvar_optimal[:,1:]
+            self.u = uvar_optimal[:, 0]
+            self.u_old = uvar_optimal[:, 1:]
             self.num_horizon = self.num_horizon - 1
-            print('state', self.x)
+            print("state", self.x)
         else:
             for iter in range(self.max_iter):
                 # Initialize the list which will store the solution to the ftocp for the l-th iteration in the safe set
@@ -386,7 +401,7 @@ class iLqr(ControlBase):
                         zt = self.x
                     else:
                         zt = xvar_optimal[:, -1]
-                    index_ss_points = self.select_close_ss(id,zt)
+                    index_ss_points = self.select_close_ss(id, zt)
                     for j in index_ss_points:
                         # define variables
                         uvar = np.zeros((U_DIM, num_horizon))
@@ -398,14 +413,24 @@ class iLqr(ControlBase):
                         x_terminal = self.ss[id][:, j]
                         cost_terminal = self.Qfun[id][j]
                         if self.num_horizon > 1:
-                        # Iteration of ilqr for tracking
+                            # Iteration of ilqr for tracking
                             for iter_ilqr in range(self.max_iter):
                                 cost = 0
                                 # Forward simulation
                                 for idx_f in range(num_horizon):
-                                    uvar[U_ID["accel"], idx_f] = np.clip(uvar[U_ID["accel"], idx_f], -self.system_param.a_max, self.system_param.a_max)
-                                    uvar[U_ID["delta"], idx_f] = np.clip(uvar[U_ID["delta"], idx_f], -self.system_param.delta_max, self.system_param.delta_max)
-                                    xvar[:, idx_f + 1] = kinetic_bicycle(xvar[:,idx_f],uvar[:,idx_f], self.timestep)
+                                    uvar[U_ID["accel"], idx_f] = np.clip(
+                                        uvar[U_ID["accel"], idx_f],
+                                        -self.system_param.a_max,
+                                        self.system_param.a_max,
+                                    )
+                                    uvar[U_ID["delta"], idx_f] = np.clip(
+                                        uvar[U_ID["delta"], idx_f],
+                                        -self.system_param.delta_max,
+                                        self.system_param.delta_max,
+                                    )
+                                    xvar[:, idx_f + 1] = kinetic_bicycle(
+                                        xvar[:, idx_f], uvar[:, idx_f], self.timestep
+                                    )
                                     dX[:, idx_f + 1] = xvar[:, idx_f + 1] - x_track.T
                                     l_state = (
                                         (xvar[:, idx_f] - x_track).T
@@ -421,7 +446,11 @@ class iLqr(ControlBase):
                                 # Backward pass
                                 # System derivation
                                 f_x = get_A_matrix(
-                                    xvar[2, 1:], xvar[3, 1:], uvar[0, :], self.num_horizon, self.timestep
+                                    xvar[2, 1:],
+                                    xvar[3, 1:],
+                                    uvar[0, :],
+                                    self.num_horizon,
+                                    self.timestep,
                                 )
                                 f_u = get_B_matrix(xvar[3, 1:], self.num_horizon, self.timestep)
                                 matrix_k, matrix_K = backward_pass(
@@ -435,7 +464,7 @@ class iLqr(ControlBase):
                                     f_u,
                                     self.ilqr_param,
                                     self.obstacle,
-                                    self.system_param
+                                    self.system_param,
                                 )
                                 # Forward pass
                                 xvar_new, uvar_new, cost_new = forward_pass(
@@ -447,7 +476,7 @@ class iLqr(ControlBase):
                                     self.num_horizon,
                                     matrix_k,
                                     matrix_K,
-                                    self.system_param
+                                    self.system_param,
                                 )
                                 if cost_new < cost:
                                     uvar = uvar_new
@@ -460,11 +489,15 @@ class iLqr(ControlBase):
                                     lamb *= lamb_factor
                                     if lamb > max_lamb:
                                         break
-                            for i in range(1,56):
-                                if np.linalg.norm([xvar[:, -1]-x_terminal]) <= 80.0*i/(10**iter):
-                                    cost_it = cost_terminal + num_horizon + 100*i
+                            for i in range(1, 56):
+                                if np.linalg.norm([xvar[:, -1] - x_terminal]) <= 80.0 * i / (
+                                    10 ** iter
+                                ):
+                                    cost_it = cost_terminal + num_horizon + 100 * i
                                     break
-                                elif np.linalg.norm([xvar[:, -1]-x_terminal]) > 80.0*55/(10**iter):
+                                elif np.linalg.norm([xvar[:, -1] - x_terminal]) > 80.0 * 55 / (
+                                    10 ** iter
+                                ):
                                     cost_it = float("Inf")
                                     break
                         else:
@@ -473,10 +506,10 @@ class iLqr(ControlBase):
                             uvar[:, 0] = self.u_old[:, 0]
                             cost_it = 1 + cost_terminal
                             # check for feasibility and store the solution
-                            if np.linalg.norm([x_next[:]-x_terminal[:]]) <= 1.0:
-                                cost_it = 1 + cost_terminal 
-                            else: 
-                                cost_it = float('Inf')      
+                            if np.linalg.norm([x_next[:] - x_terminal[:]]) <= 1.0:
+                                cost_it = 1 + cost_terminal
+                            else:
+                                cost_it = float("Inf")
                         # Store the cost and solution associated with xf. From these solution we will pick and apply the best one
                         cost_iter.append(cost_it)
                         u_pred_iter.append(deepcopy(uvar[:, 0]))
@@ -497,16 +530,17 @@ class iLqr(ControlBase):
                 uvar_optimal = u_list[best_iter_loc_ss][best_time]
                 xvar_optimal = x_pred[best_iter_loc_ss][best_time]
                 xf_optimal = x_terminal_list[best_iter_loc_ss][best_time]
-                self.u = uvar_optimal[:,0]
-                if self.num_horizon >1:
+                self.u = uvar_optimal[:, 0]
+                if self.num_horizon > 1:
                     self.u_old = uvar_optimal[:, 1:]
-                if iter == 2 :
+                if iter == 2:
                     # Change time horizon length
-                    if (id_list[best_iter_loc_ss][best_time] + 1) > (self.ss[best_iter].shape[1] - 1):
+                    if (id_list[best_iter_loc_ss][best_time] + 1) > (
+                        self.ss[best_iter].shape[1] - 1
+                    ):
                         self.num_horizon = self.num_horizon - 1
                     break
         self.time += self.timestep
-         
 
 
 class LMPCParam:
@@ -590,7 +624,7 @@ class LMPC(ControlBase):
         id_list = []
         x_pred = []
         u_pred = []
-        print('state at current step', self.x)
+        print("state at current step", self.x)
         if self.lmpc_param.all_ss_iter:
             min_iter = 0
         else:
@@ -635,7 +669,7 @@ class LMPC(ControlBase):
         best_iter_loc_ss = cost_list.index(min(cost_list))
         cost_vec = cost_list[best_iter_loc_ss]
         if min(cost_vec) == float("inf"):
-            print('cost vec',cost_vec)
+            print("cost vec", cost_vec)
             os.system("pause")
         best_time = cost_vec.index(min(cost_vec))
         best_iter = best_iter_loc_ss + min_iter
@@ -683,7 +717,6 @@ class LMPC(ControlBase):
                 print("Changing horizon to ", self.num_horizon - 1)
             self.num_horizon = self.num_horizon - 1
         self.time += self.timestep
-        
 
     def add_trajectory(self, x, u):
         self.ss.append(x.T)
@@ -744,13 +777,13 @@ class Simulator:
             if self.robotic.ctrl_policy.obstacle is not None:
                 self.robotic.ctrl_policy.obstacle.update_obstacle()
             if np.linalg.norm(self.robotic.x - self.initial_traj[-1, :]) <= 0.8:  # 1e-4
-                print('state', self.robotic.x)
+                print("state", self.robotic.x)
                 self.robotic.update_memory_post_iter()
                 if self.robotic.ctrl_policy.obstacle is not None:
                     self.robotic.ctrl_policy.obstacle.reset_obstacle()
                 print("iteration: {}".format(iter) + " finished")
                 break
-            if i == int(sim_time / self.timestep)-1:
+            if i == int(sim_time / self.timestep) - 1:
                 self.robotic.update_memory_post_iter()
                 if self.robotic.ctrl_policy.obstacle is not None:
                     self.robotic.ctrl_policy.obstacle.reset_obstacle()
@@ -791,4 +824,3 @@ class Simulator:
         )
         plt.legend(handles=[line1, line2])
         plt.show()
-

@@ -58,11 +58,19 @@ def test_ilqr(args):
     for iter in range(lap_number):
         print("iteration ", iter, "begins")
         simulator.sim(iter, sim_time=sim_time)
-        ego.data["state"][-1][-1,:] = ego.xcl[-1,:]
+        ego.data["state"][-1][-1, :] = ego.xcl[-1, :]
         ilqr.add_trajectory(ego.data["state"][-1], ego.data["input"][-1])
     if save_ilqr_traj == True:
-        np.savetxt('data/ilqr_closed_loop_multi_laps.txt', np.round(np.array(ego.data["state"][-1]), decimals=5), fmt='%f' )
-        np.savetxt('data/ilqr_input_multi_laps.txt', np.round(np.array(ego.data["input"][-1]), decimals=5), fmt='%f' )
+        np.savetxt(
+            "data/ilqr_closed_loop_multi_laps.txt",
+            np.round(np.array(ego.data["state"][-1]), decimals=5),
+            fmt="%f",
+        )
+        np.savetxt(
+            "data/ilqr_input_multi_laps.txt",
+            np.round(np.array(ego.data["input"][-1]), decimals=5),
+            fmt="%f",
+        )
     print("time at iteration 0 is", len(ego.xcl) * dt, " s")
     for id in range(len(ego.data["timestamp"])):
         lap = id + 1
@@ -74,6 +82,7 @@ def test_ilqr(args):
 
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--lap-number", type=int)
     parser.add_argument("--num-ss-points", type=int)

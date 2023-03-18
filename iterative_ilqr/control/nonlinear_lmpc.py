@@ -14,7 +14,7 @@ def nlmpc(
     old_cost,
     cost_terminal,
     sys_param,
-    obstacle
+    obstacle,
 ):
     if num_horizon > 1:
         X = SX.sym("X", X_DIM * (num_horizon + 1))
@@ -31,7 +31,7 @@ def nlmpc(
                 - (
                     X[X_DIM * i + 0]
                     + np.cos(X[X_DIM * i + 3])
-                    * (X[X_DIM * i + 2] * timestep + (U[U_DIM * i + 0] * timestep**2) / 2)
+                    * (X[X_DIM * i + 2] * timestep + (U[U_DIM * i + 0] * timestep ** 2) / 2)
                 ),
             )
             constraint = vertcat(
@@ -40,7 +40,7 @@ def nlmpc(
                 - (
                     X[X_DIM * i + 1]
                     + np.sin(X[X_DIM * i + 3])
-                    * (X[X_DIM * i + 2] * timestep + (U[U_DIM * i + 0] * timestep**2) / 2)
+                    * (X[X_DIM * i + 2] * timestep + (U[U_DIM * i + 0] * timestep ** 2) / 2)
                 ),
             )
             constraint = vertcat(
@@ -54,28 +54,34 @@ def nlmpc(
         if obstacle is not None:
             # obstacle avoidance
             for i in range(1, num_horizon):
-                
-                if obstacle.spd ==0 or obstacle.spd is None:   
+
+                if obstacle.spd == 0 or obstacle.spd is None:
                     constraint = vertcat(
-                    constraint,
-                    ((X[X_DIM * i + 0] - obstacle.x) ** 2 / (obstacle.width**2))
-                    + ((X[X_DIM * i + 1] - obstacle.y) ** 2 / (obstacle.height**2))
-                    - slack_obs[i - 1],
-                )
-                if obstacle.moving_option == 1: # moving upward
+                        constraint,
+                        ((X[X_DIM * i + 0] - obstacle.x) ** 2 / (obstacle.width ** 2))
+                        + ((X[X_DIM * i + 1] - obstacle.y) ** 2 / (obstacle.height ** 2))
+                        - slack_obs[i - 1],
+                    )
+                if obstacle.moving_option == 1:  # moving upward
                     constraint = vertcat(
-                    constraint,
-                    ((X[X_DIM * i + 0] - obstacle.x) ** 2 / (obstacle.width**2))
-                    + ((X[X_DIM * i + 1] - (obstacle.y+obstacle.spd*i)) ** 2 / (obstacle.height**2))
-                    - slack_obs[i - 1],
-                )
-                if obstacle.moving_option == 2: # moving toward left
+                        constraint,
+                        ((X[X_DIM * i + 0] - obstacle.x) ** 2 / (obstacle.width ** 2))
+                        + (
+                            (X[X_DIM * i + 1] - (obstacle.y + obstacle.spd * i)) ** 2
+                            / (obstacle.height ** 2)
+                        )
+                        - slack_obs[i - 1],
+                    )
+                if obstacle.moving_option == 2:  # moving toward left
                     constraint = vertcat(
-                    constraint,
-                    ((X[X_DIM * i + 0] - (obstacle.x-obstacle.spd*i)) ** 2 / (obstacle.width**2))
-                    + ((X[X_DIM * i + 1] - (obstacle.y)) ** 2 / (obstacle.height**2))
-                    - slack_obs[i - 1],
-                )
+                        constraint,
+                        (
+                            (X[X_DIM * i + 0] - (obstacle.x - obstacle.spd * i)) ** 2
+                            / (obstacle.width ** 2)
+                        )
+                        + ((X[X_DIM * i + 1] - (obstacle.y)) ** 2 / (obstacle.height ** 2))
+                        - slack_obs[i - 1],
+                    )
         # no slack
         constraint = vertcat(
             constraint,
@@ -114,7 +120,7 @@ def nlmpc(
                 + [0] * X_DIM
             )
             xGuessTot = np.concatenate((x_guess, np.zeros(X_DIM)), axis=0)
-        else:                
+        else:
             lbg_dyanmics = [0] * (X_DIM * num_horizon) + [0 * 1.0] * (num_horizon - 1) + [0] * X_DIM
             ubg_dyanmics = (
                 [0] * (X_DIM * num_horizon) + [0 * 100000000] * (num_horizon - 1) + [0] * X_DIM
@@ -154,13 +160,13 @@ def nlmpc(
             )
         ]
         if obstacle is not None:
-            slack_obs_sol = x[((num_horizon + 1) * X_DIM + U_DIM * num_horizon + X_DIM): ]
-        if (solver.stats()["success"]) and (np.linalg.norm(x_sol[:,-1] - x_terminal, 2) <=1e-04):
+            slack_obs_sol = x[((num_horizon + 1) * X_DIM + U_DIM * num_horizon + X_DIM) :]
+        if (solver.stats()["success"]) and (np.linalg.norm(x_sol[:, -1] - x_terminal, 2) <= 1e-04):
             feasible = 1
         else:
             feasible = 0
         cost = num_horizon + cost_terminal if feasible else float("Inf")
-        
+
     else:
         xNext = kinetic_bicycle(
             x,

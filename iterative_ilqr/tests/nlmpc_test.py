@@ -61,8 +61,16 @@ def nlmpc_test(args):
         lmpc.add_trajectory(np.array(ego.all_xs[-1]).T, np.array(ego.all_inputs[-1]).T)
     print("time at iteration 0 is", len(ego.xcl.T) * dt, " s")
     if save_lmpc_traj == True:
-        np.savetxt('data/nlmpc_closed_loop_multi_laps.txt', np.round(np.array(ego.data["state"][-1]), decimals=5), fmt='%f' )
-        np.savetxt('data/nlmpc_input_multi_laps.txt', np.round(np.array(ego.data["input"][-1]), decimals=5), fmt='%f' )
+        np.savetxt(
+            "data/nlmpc_closed_loop_multi_laps.txt",
+            np.round(np.array(ego.data["state"][-1]), decimals=5),
+            fmt="%f",
+        )
+        np.savetxt(
+            "data/nlmpc_input_multi_laps.txt",
+            np.round(np.array(ego.data["input"][-1]), decimals=5),
+            fmt="%f",
+        )
     for id in range(len(ego.all_times)):
         lap = id + 1
         print("time at iteration ", lap, " is ", (len(ego.all_times[id]) * dt), " s")
@@ -73,6 +81,7 @@ def nlmpc_test(args):
 
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--lap-number", type=int)
     parser.add_argument("--num-ss-points", type=int)
