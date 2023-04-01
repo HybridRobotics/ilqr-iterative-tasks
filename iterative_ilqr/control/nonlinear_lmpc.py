@@ -54,7 +54,6 @@ def nlmpc(
         if obstacle is not None:
             # obstacle avoidance
             for i in range(1, num_horizon):
-
                 if obstacle.spd == 0 or obstacle.spd is None:
                     constraint = vertcat(
                         constraint,

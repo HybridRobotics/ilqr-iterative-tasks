@@ -24,9 +24,9 @@ def get_cost_derivation(ctrl_U, dX, ilqr_param, num_horizon, xvar, obstacle, sys
         b = obstacle.height
     for i in range(num_horizon):
         b_dot_ctrl, b_ddot_ctrl = add_control_constraint(ctrl_U[:, i], ilqr_param, sys_param)
-        l_u_i = (2 * ilqr_param.matrix_R @ ctrl_U[:, i]).reshape(2, 1) + b_dot_ctrl
+        l_u_i = (2 * ilqr_param.matrix_R @ ctrl_U[:, i]).reshape(U_DIM, 1) + b_dot_ctrl
         l_uu_i = 2 * ilqr_param.matrix_R + b_ddot_ctrl
-        l_x_i = (2 * ilqr_param.matrix_Q @ dX[:, i]).reshape(4, 1)
+        l_x_i = (2 * ilqr_param.matrix_Q @ dX[:, i]).reshape(X_DIM, 1)
         l_xx_i = 2 * ilqr_param.matrix_Q
         # calculate control barrier functions for each obstacle at timestep
         if obstacle is not None:
@@ -65,7 +65,6 @@ def repelling_cost_function(q1, q2, c, c_dot):
 
 
 def select_points(ss_xcurv, Qfun, iter, x0, num_ss_points):
-    index_selected = []
     Qfun_vec = Qfun[iter]
     xcurv = ss_xcurv[iter]
     xcurv = np.array(xcurv)
@@ -76,11 +75,8 @@ def select_points(ss_xcurv, Qfun, iter, x0, num_ss_points):
     norm = la.norm(diff, 1, axis=1)
     idxMinNorm = np.argsort(norm).astype(int)
     print("idx selected", idxMinNorm[0 : int(num_ss_points)])
-
     ss_points = xcurv[idxMinNorm[0 : int(num_ss_points)]].T
     sel_Qfun = Qfun_vec[idxMinNorm[0 : int(num_ss_points)]]
-    Qfun_temp = sel_Qfun.tolist()
-    min_index = Qfun_temp.index(min(Qfun_temp))
     return ss_points, sel_Qfun, idxMinNorm[0 : int(num_ss_points)]
 
 

@@ -17,7 +17,6 @@ def test_ilqr(args):
     num_horizon = 6
     dt = 1
     sim_time = 50
-    ss_optioin = "spaceVarying"
     lap_number = args["lap_number"]
     num_ss_iter = args["num_ss_iters"]
     num_ss_points = args["num_ss_points"]
@@ -42,7 +41,6 @@ def test_ilqr(args):
         num_ss_points=num_ss_points,
         num_ss_iter=num_ss_iter,
         timestep=dt,
-        ss_option=ss_optioin,
         num_horizon=num_horizon,
         all_ss_iter=all_ss_iter,
         all_ss_point=all_ss_point,
