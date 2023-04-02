@@ -7,6 +7,7 @@ from systems.kinetic_bicycle import *
 from numpy import linalg as la
 from control.nonlinear_lmpc import *
 from control.ilqr_helper import *
+from control.iterative_ilqr import *
 import matplotlib.pyplot as plt
 import pickle as pkl
 
@@ -251,6 +252,13 @@ class iLqrParam:
         tuning_obs_q1=2.74,
         tuning_obs_q2=2.74,
         safety_margin=0.0,
+        max_ilqr_iter=150,
+        eps=1e-2,
+        lamb=1,
+        lamb_factor=10,
+        max_lamb=1000,
+        reach_error=1.0,
+        max_relax_iter=55,
         timestep=None,
         lap_number=None,
         time_ilqr=None,
@@ -277,6 +285,16 @@ class iLqrParam:
         self.tuning_obs_q2 = tuning_obs_q2
 
         self.safety_margin = safety_margin
+        self.max_ilqr_iter = max_ilqr_iter
+        # rate of convergence for ILQR
+        self.eps = eps
+        # regularization factor for ILQR
+        self.lamb = lamb
+        self.lamb_factor = lamb_factor
+        self.max_lamb = max_lamb
+        self.reach_error = reach_error
+        # maximum iteration of weights' tunning
+        self.max_relax_iter = max_relax_iter
 
 
 class iLqr(ControlBase):
@@ -299,19 +317,9 @@ class iLqr(ControlBase):
         self.x_pred = None
         self.u_pred = None
         self.cost_improve = None
+        self.max_iter_outloop = 10
         self.num_horizon = self.ilqr_param.num_horizon
-        self.matrix_Qlamb = self.ilqr_param.matrix_Qlamb
-        self.matrix_Q = self.ilqr_param.matrix_Q
-        self.matrix_R = self.ilqr_param.matrix_R
         self.obstacle = obstacle
-        self.max_ilqr_iter = 150
-        self.eps = 1e-2
-        self.lamb = 1
-        self.lamb_factor = 10
-        self.max_lamb = 1000
-        self.reach_error = 1.0
-        # maximum iteration of weights' tunning
-        self.max_relax_iter = 55
 
     def select_close_ss(self, iter, x0):
         x = self.ss[iter]
@@ -352,14 +360,8 @@ class iLqr(ControlBase):
                 )
 
     def calc_input(self):
-        num_horizon = self.num_horizon
-        # rate of convergence for ILQR
-        eps = self.eps
-        # regularization parameters in backwards
-        lamb_factor = self.lamb_factor
-        max_lamb = self.max_lamb
         # tracking when matrix_Q is not zero, this is not used right now
-        x_track = np.array([0, 0, 0, 0])
+        xtarget = np.array([0, 0, 0, 0])
         # select the oldest iteration used
         min_iter = np.max([0, self.iter - self.ilqr_param.num_ss_iter])
         if self.num_horizon < self.ilqr_param.num_horizon:
@@ -369,7 +371,7 @@ class iLqr(ControlBase):
             self.num_horizon = self.num_horizon - 1
             print("state", self.x)
         else:
-            for iter in range(self.max_ilqr_iter):
+            for iter in range(self.max_iter_outloop):
                 # Initialize the list which will store the solution to the ftocp for the l-th iteration in the safe set
                 cost_list = []
                 u_list = []
@@ -378,7 +380,6 @@ class iLqr(ControlBase):
                 u_pred = []
                 for id in range(min_iter, self.iter):
                     # select k neigbors for initial
-                    lamb = self.lamb
                     cost_iter = []
                     input_iter = []
                     x_pred_iter = []
@@ -389,113 +390,21 @@ class iLqr(ControlBase):
                         zt = xvar_optimal[:, -1]
                     index_ss_points = self.select_close_ss(id, zt)
                     for j in index_ss_points:
-                        # define variables
-                        uvar = np.zeros((U_DIM, num_horizon))
-                        xvar = np.zeros((X_DIM, num_horizon + 1))
-                        xvar[:, 0] = self.x
-                        # diffence between xvar and x_track
-                        dX = np.zeros((X_DIM, num_horizon + 1))
-                        dX[:, 0] = xvar[:, 0] - x_track
-                        x_terminal = self.ss[id][:, j]
-                        cost_terminal = self.Qfun[id][j]
-                        if self.num_horizon > 1:
-                            # Iteration of ilqr for tracking
-                            for iter_ilqr in range(self.max_ilqr_iter):
-                                cost = 0
-                                # Forward simulation
-                                for idx_f in range(num_horizon):
-                                    uvar[U_ID["accel"], idx_f] = np.clip(
-                                        uvar[U_ID["accel"], idx_f],
-                                        -self.system_param.a_max,
-                                        self.system_param.a_max,
-                                    )
-                                    uvar[U_ID["delta"], idx_f] = np.clip(
-                                        uvar[U_ID["delta"], idx_f],
-                                        -self.system_param.delta_max,
-                                        self.system_param.delta_max,
-                                    )
-                                    xvar[:, idx_f + 1] = kinetic_bicycle(
-                                        xvar[:, idx_f], uvar[:, idx_f], self.timestep
-                                    )
-                                    dX[:, idx_f + 1] = xvar[:, idx_f + 1] - x_track.T
-                                    l_state = (
-                                        (xvar[:, idx_f] - x_track).T
-                                        @ self.matrix_Q
-                                        @ (xvar[:, idx_f] - x_track)
-                                    )
-                                    l_ctrl = uvar[:, idx_f].T @ self.matrix_R @ uvar[:, idx_f]
-                                    cost = cost + l_state + l_ctrl
-                                dx_terminal = xvar[:, -1] - x_terminal.T
-                                dx_terminal = dx_terminal.reshape(X_DIM)
-                                # ILQR cost is defined as: x_k Q x_k + u_k R u_k + (D(x_t)lambda - x_N) Qlamb (D(x)lambda - x_N)
-                                cost = cost + dx_terminal.T @ self.matrix_Qlamb @ dx_terminal
-                                # Backward pass
-                                # System derivation
-                                f_x = get_A_matrix(
-                                    xvar[2, 1:],
-                                    xvar[3, 1:],
-                                    uvar[0, :],
-                                    self.num_horizon,
-                                    self.timestep,
-                                )
-                                f_u = get_B_matrix(xvar[3, 1:], self.num_horizon, self.timestep)
-                                matrix_k, matrix_K = backward_pass(
-                                    xvar,
-                                    uvar,
-                                    x_terminal,
-                                    dX,
-                                    lamb,
-                                    num_horizon,
-                                    f_x,
-                                    f_u,
-                                    self.ilqr_param,
-                                    self.obstacle,
-                                    self.system_param,
-                                )
-                                # Forward pass
-                                xvar_new, uvar_new, cost_new = forward_pass(
-                                    xvar,
-                                    uvar,
-                                    x_terminal,
-                                    self.ilqr_param,
-                                    self.timestep,
-                                    self.num_horizon,
-                                    matrix_k,
-                                    matrix_K,
-                                    self.system_param,
-                                )
-                                if cost_new < cost:
-                                    uvar = uvar_new
-                                    xvar = xvar_new
-                                    lamb /= lamb_factor
-                                    if abs((cost_new - cost) / cost) < eps:
-                                        print("Convergence achieved")
-                                        break
-                                else:
-                                    lamb *= lamb_factor
-                                    if lamb > max_lamb:
-                                        break
-                            for i in range(1, self.max_relax_iter + 1):
-                                if np.linalg.norm([xvar[:, -1] - x_terminal]) <= 80.0 * i / (
-                                    10 ** iter
-                                ):
-                                    cost_it = cost_terminal + num_horizon + 100 * i
-                                    break
-                                elif np.linalg.norm(
-                                    [xvar[:, -1] - x_terminal]
-                                ) > 80.0 * self.max_relax_iter / (10 ** iter):
-                                    cost_it = float("Inf")
-                                    break
-                        else:
-                            x_next = kinetic_bicycle(self.x, self.u_old[:, 0], self.timestep)
-                            xvar[:, -1] = x_next
-                            uvar[:, 0] = self.u_old[:, 0]
-                            cost_it = 1 + cost_terminal
-                            # check for feasibility and store the solution
-                            if np.linalg.norm([x_next[:] - x_terminal[:]]) <= self.reach_error:
-                                cost_it = 1 + cost_terminal
-                            else:
-                                cost_it = float("Inf")
+                        cost_it, uvar, xvar = ilqr(
+                            self.num_horizon,
+                            self.ilqr_param,
+                            self.system_param,
+                            self.x,
+                            xtarget,
+                            self.obstacle,
+                            self.u_old,
+                            self.ss,
+                            self.Qfun,
+                            j,
+                            id,
+                            self.timestep,
+                            iter,
+                        )
                         # Store the cost and solution associated with xf. From these solution we will pick and apply the best one
                         cost_iter.append(cost_it)
                         u_pred_iter.append(deepcopy(uvar[:, 0]))

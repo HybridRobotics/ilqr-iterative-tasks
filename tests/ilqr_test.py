@@ -32,7 +32,6 @@ def test_ilqr(ss_option):
         num_ss_points=num_ss_points,
         num_ss_iter=num_ss_iter,
         timestep=dt,
-        ss_option=ss_optioin,
         num_horizon=num_horizon,
         all_ss_iter=all_ss_iter,
         all_ss_point=all_ss_point,
