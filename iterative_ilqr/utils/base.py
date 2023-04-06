@@ -1,14 +1,15 @@
 import numpy as np
 import datetime
-import os
 from copy import deepcopy
 from utils.constants_kinetic_bicycle import *
 from systems.kinetic_bicycle import *
 from numpy import linalg as la
+import pdb
 from control.nonlinear_lmpc import *
 from control.ilqr_helper import *
 from control.iterative_ilqr import *
 import matplotlib.pyplot as plt
+import control.ilqr_helper
 import pickle as pkl
 
 
@@ -114,6 +115,7 @@ class KineticBicycle:
                     u[U_ID["accel"]] = -1
                 else:
                     u[U_ID["accel"]] = 0
+
                 if i > 0 and i <= 1 / self.timestep:
                     u[U_ID["delta"]] = angle
                 elif (
@@ -165,6 +167,7 @@ class KineticBicycle:
         self.timestamps = (
             self.time if self.timestamps is None else np.vstack((self.timestamps, self.time))
         )
+
         if (
             self.timestamps is not None
             and type(self.timestamps) is not float
@@ -172,6 +175,7 @@ class KineticBicycle:
         ):
             with open("data/ego_nlmpc_ss_" + str(8) + "_add_static_obstacle.obj", "wb") as handle:
                 pkl.dump(self, handle, protocol=pkl.HIGHEST_PROTOCOL)
+
         self.solver_times = (
             self.delta_timer
             if self.solver_times is None
@@ -259,9 +263,11 @@ class iLqrParam:
         max_lamb=1000,
         reach_error=1.0,
         max_relax_iter=55,
+        max_outloop_iter=50,
         timestep=None,
         lap_number=None,
         time_ilqr=None,
+        ss_option=None,
         all_ss_point=False,
         all_ss_iter=False,
     ):
@@ -274,16 +280,15 @@ class iLqrParam:
         self.timestep = timestep
         self.lap_number = lap_number
         self.time_ilqr = time_ilqr
+        self.ss_option = ss_option
         self.all_ss_point = all_ss_point
         self.all_ss_iter = all_ss_iter
-        # parameters to tune the shape of repelling_cost_function
         self.tuning_state_q1 = tuning_state_q1
         self.tuning_state_q2 = tuning_state_q2
         self.tuning_ctrl_q1 = tuning_ctrl_q1
         self.tuning_ctrl_q2 = tuning_ctrl_q2
         self.tuning_obs_q1 = tuning_obs_q1
         self.tuning_obs_q2 = tuning_obs_q2
-
         self.safety_margin = safety_margin
         self.max_ilqr_iter = max_ilqr_iter
         # rate of convergence for ILQR
@@ -295,6 +300,7 @@ class iLqrParam:
         self.reach_error = reach_error
         # maximum iteration of weights' tunning
         self.max_relax_iter = max_relax_iter
+        self.max_outloop_iter = max_outloop_iter
 
 
 class iLqr(ControlBase):
@@ -317,14 +323,17 @@ class iLqr(ControlBase):
         self.x_pred = None
         self.u_pred = None
         self.cost_improve = None
-        self.max_iter_outloop = 10
         self.num_horizon = self.ilqr_param.num_horizon
+        self.matrix_Qlamb = self.ilqr_param.matrix_Qlamb
+        self.matrix_Q = self.ilqr_param.matrix_Q
+        self.matrix_R = self.ilqr_param.matrix_R
         self.obstacle = obstacle
 
     def select_close_ss(self, iter, x0):
         x = self.ss[iter]
         one_vec = np.ones((x.shape[1], 1))
         terminal_guess_vec = np.dot(np.array([x0]).T, one_vec.T)
+        # terminal_guess_vec = (np.dot(np.ones((x.shape[1], 1)), np.array([self.x_terminal_guess]))).T
         diff = x - terminal_guess_vec
         norm = la.norm(np.array(diff), 1, axis=0)
         index_min_norm = np.argsort(norm)
@@ -360,6 +369,10 @@ class iLqr(ControlBase):
                 )
 
     def calc_input(self):
+        num_horizon = self.num_horizon
+        # regularization parameters in backwards
+        lamb_factor = self.ilqr_param.lamb_factor
+        max_lamb = self.ilqr_param.max_lamb
         # tracking when matrix_Q is not zero, this is not used right now
         xtarget = np.array([0, 0, 0, 0])
         # select the oldest iteration used
@@ -371,7 +384,7 @@ class iLqr(ControlBase):
             self.num_horizon = self.num_horizon - 1
             print("state", self.x)
         else:
-            for iter in range(self.max_iter_outloop):
+            for iter in range(self.ilqr_param.max_outloop_iter):
                 # Initialize the list which will store the solution to the ftocp for the l-th iteration in the safe set
                 cost_list = []
                 u_list = []
@@ -380,6 +393,7 @@ class iLqr(ControlBase):
                 u_pred = []
                 for id in range(min_iter, self.iter):
                     # select k neigbors for initial
+                    lamb = self.ilqr_param.lamb
                     cost_iter = []
                     input_iter = []
                     x_pred_iter = []
@@ -390,21 +404,56 @@ class iLqr(ControlBase):
                         zt = xvar_optimal[:, -1]
                     index_ss_points = self.select_close_ss(id, zt)
                     for j in index_ss_points:
-                        cost_it, uvar, xvar = ilqr(
-                            self.num_horizon,
-                            self.ilqr_param,
-                            self.system_param,
-                            self.x,
-                            xtarget,
-                            self.obstacle,
-                            self.u_old,
-                            self.ss,
-                            self.Qfun,
-                            j,
-                            id,
-                            self.timestep,
-                            iter,
-                        )
+                        # define variables
+                        uvar = np.zeros((U_DIM, num_horizon))
+                        xvar = np.zeros((X_DIM, num_horizon + 1))
+                        xvar[:, 0] = self.x
+                        # diffence between xvar and x_track
+                        dX = np.zeros((X_DIM, num_horizon + 1))
+                        dX[:, 0] = xvar[:, 0] - xtarget
+                        x_terminal = self.ss[id][:, j]
+                        cost_terminal = self.Qfun[id][j]
+                        if self.num_horizon > 1:
+                            uvar, xvar, lamb = ilqr(
+                                self.ilqr_param,
+                                num_horizon,
+                                self.num_horizon,
+                                xtarget,
+                                self.timestep,
+                                self.obstacle,
+                                self.system_param,
+                                x_terminal,
+                                dX,
+                                uvar,
+                                xvar,
+                                lamb,
+                                lamb_factor,
+                                max_lamb,
+                            )
+                            for i in range(1, self.ilqr_param.max_relax_iter + 1):
+                                if np.linalg.norm([xvar[:, -1] - x_terminal]) <= 80.0 * i / (
+                                    10 ** iter
+                                ):
+                                    cost_it = cost_terminal + num_horizon + 100 * i
+                                    break
+                                elif np.linalg.norm(
+                                    [xvar[:, -1] - x_terminal]
+                                ) > 80.0 * self.ilqr_param.max_relax_iter / (10 ** iter):
+                                    cost_it = float("Inf")
+                                    break
+                        else:
+                            x_next = kinetic_bicycle(self.x, self.u_old[:, 0], self.timestep)
+                            xvar[:, -1] = x_next
+                            uvar[:, 0] = self.u_old[:, 0]
+                            cost_it = 1 + cost_terminal
+                            # check for feasibility and store the solution
+                            if (
+                                np.linalg.norm([x_next[:] - x_terminal[:]])
+                                <= self.ilqr_param.reach_error
+                            ):
+                                cost_it = 1 + cost_terminal
+                            else:
+                                cost_it = float("Inf")
                         # Store the cost and solution associated with xf. From these solution we will pick and apply the best one
                         cost_iter.append(cost_it)
                         u_pred_iter.append(deepcopy(uvar[:, 0]))

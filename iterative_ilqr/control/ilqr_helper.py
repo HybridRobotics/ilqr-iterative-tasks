@@ -87,16 +87,16 @@ def add_control_constraint(u, ilqr_param, sys_param):
     q1 = ilqr_param.tuning_ctrl_q1
     q2 = ilqr_param.tuning_ctrl_q2
     # Add acceleration barrier max
-    c = np.matmul(u.T, matrix_P1) - sys_param.a_max
+    c = np.matmul(u.T, matrix_P1) - ACCEL_MAX
     _, b_dot_1, b_ddot_1 = repelling_cost_function(q1, q2, c, matrix_P1)
     # Add acceleration barrier min
-    c = -sys_param.a_max - np.matmul(u.T, matrix_P1)
+    c = ACCEL_MIN - np.matmul(u.T, matrix_P1)
     _, b_dot_2, b_ddot_2 = repelling_cost_function(q1, q2, c, -matrix_P1)
     # Yawrate Barrier Max
-    c = (np.matmul(u.T, matrix_P2)) - sys_param.delta_max
+    c = (np.matmul(u.T, matrix_P2)) - DELTA_MAX
     b_3, b_dot_3, b_ddot_3 = repelling_cost_function(q1, q2, c, matrix_P2)
     # Yawrate Barrier Min
-    c = -sys_param.delta_max - np.matmul(u.T, matrix_P2)
+    c = DELTA_MIN - np.matmul(u.T, matrix_P2)
     b_4, b_dot_4, b_ddot_4 = repelling_cost_function(q1, q2, c, -matrix_P2)
     b_dot_ctrl = b_dot_1 + b_dot_2 + b_dot_3 + b_dot_4
     b_ddot_ctrl = b_ddot_1 + b_ddot_2 + b_ddot_3 + b_ddot_4

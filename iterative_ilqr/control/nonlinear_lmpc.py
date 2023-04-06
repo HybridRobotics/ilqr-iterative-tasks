@@ -54,6 +54,7 @@ def nlmpc(
         if obstacle is not None:
             # obstacle avoidance
             for i in range(1, num_horizon):
+
                 if obstacle.spd == 0 or obstacle.spd is None:
                     constraint = vertcat(
                         constraint,
@@ -81,14 +82,24 @@ def nlmpc(
                         + ((X[X_DIM * i + 1] - (obstacle.y)) ** 2 / (obstacle.height ** 2))
                         - slack_obs[i - 1],
                     )
+
+        # slack
+        # constraint = vertcat(
+        #     constraint,
+        #     X[X_DIM * num_horizon : X_DIM * (num_horizon + 1)] - x_terminal + slack,
+        # )
         # no slack
         constraint = vertcat(
             constraint,
             X[X_DIM * num_horizon : X_DIM * (num_horizon + 1)] - x_terminal,
         )
+        # cost = 1000000 * (slack[0] ** 2 + slack[1] ** 2 + slack[2] ** 2 + slack[3] ** 2)
         cost = 0
         for i in range(0, num_horizon):
             cost = cost + 1
+            # if i >= 1:
+            #     if obstacle is not None:
+            #         cost = cost + 100*slack_obs[i-1]**2
         opts = {
             "verbose": False,
             "ipopt.print_level": 0,
@@ -110,12 +121,18 @@ def nlmpc(
                 x
                 + [-1000] * (X_DIM * (num_horizon))
                 + [-sys_param.a_max, -sys_param.delta_max] * num_horizon
+                # slack
+                # + [-1000] * X_DIM
+                # no slack
                 + [0] * X_DIM
             )
             ubx = (
                 x
                 + [1000] * (X_DIM * (num_horizon))
                 + [sys_param.a_max, sys_param.delta_max] * num_horizon
+                # slack
+                # + [1000] * X_DIM
+                # no slack
                 + [0] * X_DIM
             )
             xGuessTot = np.concatenate((x_guess, np.zeros(X_DIM)), axis=0)
@@ -128,6 +145,9 @@ def nlmpc(
                 x
                 + [-1000] * (X_DIM * (num_horizon))
                 + [-sys_param.a_max, -sys_param.delta_max] * num_horizon
+                # slack
+                # + [-1000] * X_DIM
+                # no slack
                 + [0] * X_DIM
                 + [1] * (num_horizon - 1)
             )
@@ -135,6 +155,9 @@ def nlmpc(
                 x
                 + [1000] * (X_DIM * (num_horizon))
                 + [sys_param.a_max, sys_param.delta_max] * num_horizon
+                # slack
+                # + [1000] * X_DIM
+                # no slack
                 + [0] * X_DIM
                 + [100000] * (num_horizon - 1)
             )
@@ -160,9 +183,16 @@ def nlmpc(
         ]
         if obstacle is not None:
             slack_obs_sol = x[((num_horizon + 1) * X_DIM + U_DIM * num_horizon + X_DIM) :]
-        if (solver.stats()["success"]) and (np.linalg.norm(x_sol[:, -1] - x_terminal, 2) <= 1e-04):
+        if (solver.stats()["success"]) and (
+            np.linalg.norm(x_sol[:, -1] - x_terminal, 2) <= 1e-04
+        ):  # (np.linalg.norm(slack_sol, 2) < 1e-8):
             feasible = 1
+            # print('norm feasible',np.linalg.norm(x_sol[:,-1] - x_terminal, 2))
+            # print('feasibility feasible', solver.stats()["success"])
         else:
+            # print('norm infeasible',np.linalg.norm(x_sol[:,-1] - x_terminal, 2))
+            # print('state infreasible', x_sol[:,-1])
+            # print('feasibility infeasible',solver.stats()["success"])
             feasible = 0
         cost = num_horizon + cost_terminal if feasible else float("Inf")
 
