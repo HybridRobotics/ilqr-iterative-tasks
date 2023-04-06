@@ -6,7 +6,7 @@ This folder contains the code to run all the results in the paper:
 #### No Obstacle(I2LQR)
 Run
 ```
-python iterative_ilqr/tests/ilqr_test_no_obstacle.py --lap-number 10 --num-ss-iters 2 --num-ss-points 8 --plotting
+python iterative_ilqr/result/ilqr_test_no_obstacle.py --lap-number 10 --num-ss-iters 2 --num-ss-points 8 --plotting
 ```
 
 This allows to test the iterative ilqr controller. The argparse arguments are listed as follow,
@@ -21,7 +21,7 @@ This allows to test the iterative ilqr controller. The argparse arguments are li
 #### No Obstacle(LMPC)
 Run
 ```
-python iterative_ilqr/tests/nlmpc_test_no_obstacle.py --lap-number 10 --num-ss-iters 2 --num-ss-points 8 --ss-option space --plotting
+python iterative_ilqr/result/nlmpc_test_no_obstacle.py --lap-number 10 --num-ss-iters 2 --num-ss-points 8 --ss-option space --plotting
 ```
 This allows to test the nonlinear lmpc controller. The argparse arguments are listed as follow,
 | name | type | choices | description |
@@ -35,7 +35,7 @@ This allows to test the nonlinear lmpc controller. The argparse arguments are li
 #### Static Obstacle(I2LQR)
 Run
 ```
-python iterative_ilqr/tests/ilqr_test_static_obstacle.py --lap-number 10 --num-ss-iters 2 --num-ss-points 8 --plotting
+python iterative_ilqr/result/ilqr_test_static_obstacle.py --lap-number 10 --num-ss-iters 2 --num-ss-points 8 --plotting
 ```
 
 This allows to test the iterative ilqr controller. The argparse arguments are listed as follow,
@@ -50,7 +50,7 @@ This allows to test the iterative ilqr controller. The argparse arguments are li
 #### Static Obstacle(LMPC)
 Run
 ```
-python iterative_ilqr/tests/nlmpc_test_static_obstacle.py --lap-number 10 --num-ss-iters 2 --num-ss-points 8 --ss-option space --plotting
+python iterative_ilqr/result/nlmpc_test_static_obstacle.py --lap-number 10 --num-ss-iters 2 --num-ss-points 8 --ss-option space --plotting
 ```
 This allows to test the nonlinear lmpc controller. The argparse arguments are listed as follow,
 | name | type | choices | description |
@@ -66,7 +66,7 @@ This allows to test the nonlinear lmpc controller. The argparse arguments are li
 #### Add Static Obstacle(I2LQR)
 Run
 ```
-python iterative_ilqr/tests/ilqr_test_add_static_obstacle.py --lap-number 6 --num-ss-iters 2 --num-ss-points 8 --plotting
+python iterative_ilqr/result/ilqr_test_add_static_obstacle.py --lap-number 6 --num-ss-iters 2 --num-ss-points 8 --plotting
 ```
 
 This allows to test the iterative ilqr controller. The argparse arguments are listed as follow,
@@ -81,7 +81,7 @@ This allows to test the iterative ilqr controller. The argparse arguments are li
 #### Add Static Obstacle(LMPC)
 Run
 ```
-python iterative_ilqr/tests/nlmpc_test_add_static_obstacle.py --lap-number 6 --num-ss-iters 2 --num-ss-points 8 --ss-option space --plotting
+python iterative_ilqr/result/nlmpc_test_add_static_obstacle.py --lap-number 6 --num-ss-iters 2 --num-ss-points 8 --ss-option space --plotting
 ```
 This allows to test the nonlinear lmpc controller. The argparse arguments are listed as follow,
 | name | type | choices | description |
@@ -95,7 +95,7 @@ This allows to test the nonlinear lmpc controller. The argparse arguments are li
 #### Add Moving Obstacle(I2LQR)
 Run
 ```
-python iterative_ilqr/tests/ilqr_test_add_moving_obstacle.py --lap-number 6 --num-ss-iters 2 --num-ss-points 8 --plotting --moving-option up
+python iterative_ilqr/result/ilqr_test_add_moving_obstacle.py --lap-number 6 --num-ss-iters 2 --num-ss-points 8 --plotting --moving-option up
 ```
 
 This allows to test the iterative ilqr controller. The argparse arguments are listed as follow,
@@ -111,7 +111,7 @@ This allows to test the iterative ilqr controller. The argparse arguments are li
 #### Add Moving Obstacle(LMPC)
 Run
 ```
-python iterative_ilqr/tests/nlmpc_test_add_moving_obstacle.py --lap-number 6 --num-ss-iters 2 --num-ss-points 8 --ss-option space --plotting --moving-option up
+python iterative_ilqr/result/nlmpc_test_add_moving_obstacle.py --lap-number 6 --num-ss-iters 2 --num-ss-points 8 --ss-option space --plotting --moving-option up
 ```
 This allows to test the nonlinear lmpc controller. The argparse arguments are listed as follow,
 | name | type | choices | description |
