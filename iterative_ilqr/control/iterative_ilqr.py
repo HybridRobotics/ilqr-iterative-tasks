@@ -42,15 +42,6 @@ def ilqr(
         # ILQR cost is defined as: x_k Q x_k + u_k R u_k + (D(x_t)lambda - x_N) Qlamb (D(x)lambda - x_N)
         cost = cost + dx_terminal.T @ matrix_Qlamb @ dx_terminal
         # Backward pass
-        # System derivation
-        f_x = get_A_matrix(
-            xvar[X_ID["v"], 1:],
-            xvar[X_ID["theta"], 1:],
-            uvar[U_ID["accel"], :],
-            self_num_horizon,
-            timestep,
-        )
-        f_u = get_B_matrix(xvar[X_ID["theta"], 1:], self_num_horizon, timestep)
         matrix_k, matrix_K = backward_pass(
             xvar,
             uvar,
@@ -58,8 +49,7 @@ def ilqr(
             dX,
             lamb,
             num_horizon,
-            f_x,
-            f_u,
+            timestep,
             ilqr_param,
             obstacle,
             system_param,
@@ -91,8 +81,17 @@ def ilqr(
 
 
 def backward_pass(
-    xvar, uvar, x_terminal, dX, lamb, num_horizon, f_x, f_u, ilqr_param, obstacle, sys_param
+    xvar, uvar, x_terminal, dX, lamb, num_horizon, timestep, ilqr_param, obstacle, sys_param
 ):
+    # System derivation
+    f_x = get_A_matrix(
+        xvar[X_ID["v"], 1:],
+        xvar[X_ID["theta"], 1:],
+        uvar[U_ID["accel"], :],
+        num_horizon,
+        timestep,
+    )
+    f_u = get_B_matrix(xvar[X_ID["theta"], 1:], num_horizon, timestep)
     # cost derivation
     l_u, l_uu, l_x, l_xx = get_cost_derivation(
         uvar, dX, ilqr_param, num_horizon, xvar, obstacle, sys_param
