@@ -246,6 +246,7 @@ class iLqrParam:
         matrix_Q=0 * np.diag([0.0, 0.0, 0.0, 0.0]),
         matrix_R=0 * np.diag([0.05, 0.05]),
         matrix_Qlamb=2 * np.diag([1.0, 1.0, 20.0, 0.02]),
+        # matrix_Qlamb=10 * np.diag([1.0, 1.0, 1.0, 1.0]),
         num_ss_points=8,
         num_ss_iter=1,
         num_horizon=6,
@@ -304,7 +305,7 @@ class iLqrParam:
 
 
 class iLqr(ControlBase):
-    def __init__(self, ilqr_param, obstacle=None, system_param=None):
+    def __init__(self, ilqr_param, obstacle=None, system_param=None, ilqr_flag=False):
         ControlBase.__init__(self)
         self.ilqr_param = ilqr_param
         self.system_param = system_param
@@ -328,6 +329,7 @@ class iLqr(ControlBase):
         self.matrix_Q = self.ilqr_param.matrix_Q
         self.matrix_R = self.ilqr_param.matrix_R
         self.obstacle = obstacle
+        self.ilqr_flag = ilqr_flag
 
     def select_close_ss(self, iter, x0):
         x = self.ss[iter]
@@ -391,6 +393,7 @@ class iLqr(ControlBase):
                 id_list = []
                 x_pred = []
                 u_pred = []
+                x_terminal_list = []
                 for id in range(min_iter, self.iter):
                     # select k neigbors for initial
                     lamb = self.ilqr_param.lamb
@@ -398,6 +401,7 @@ class iLqr(ControlBase):
                     input_iter = []
                     x_pred_iter = []
                     u_pred_iter = []
+                    x_terminal_iter = []
                     if iter == 0:
                         zt = self.x
                     else:
@@ -414,22 +418,47 @@ class iLqr(ControlBase):
                         x_terminal = self.ss[id][:, j]
                         cost_terminal = self.Qfun[id][j]
                         if self.num_horizon > 1:
-                            uvar, xvar, lamb = ilqr(
-                                self.ilqr_param,
-                                num_horizon,
-                                self.num_horizon,
-                                xtarget,
-                                self.timestep,
-                                self.obstacle,
-                                self.system_param,
-                                x_terminal,
-                                dX,
-                                uvar,
-                                xvar,
-                                lamb,
-                                lamb_factor,
-                                max_lamb,
-                            )
+                            if self.ilqr_flag == True:
+                                uvar, xvar, lamb = ilqr(
+                                    self.ilqr_param,
+                                    num_horizon,
+                                    self.num_horizon,
+                                    xtarget,
+                                    self.timestep,
+                                    self.obstacle,
+                                    self.system_param,
+                                    x_terminal,
+                                    dX,
+                                    uvar,
+                                    xvar,
+                                    lamb,
+                                    lamb_factor,
+                                    max_lamb,
+                                )
+                            else:
+                                matrix_k, matrix_K = backward_pass(
+                                    xvar,
+                                    uvar,
+                                    x_terminal,
+                                    dX,
+                                    lamb,
+                                    num_horizon,
+                                    self.timestep,
+                                    self.ilqr_param,
+                                    self.obstacle,
+                                    self.system_param,
+                                )
+                                xvar, uvar, cost = forward_pass(
+                                    xvar,
+                                    uvar,
+                                    x_terminal,
+                                    self.ilqr_param,
+                                    self.timestep,
+                                    self.num_horizon,
+                                    matrix_k,
+                                    matrix_K,
+                                    self.system_param,
+                                )
                             for i in range(1, self.ilqr_param.max_relax_iter + 1):
                                 if np.linalg.norm([xvar[:, -1] - x_terminal]) <= 80.0 * i / (
                                     10 ** iter
@@ -459,11 +488,13 @@ class iLqr(ControlBase):
                         u_pred_iter.append(deepcopy(uvar[:, 0]))
                         x_pred_iter.append(deepcopy(xvar))
                         input_iter.append(deepcopy(uvar))
+                        x_terminal_iter.append(deepcopy(x_terminal))
                     id_list.append(index_ss_points)
                     cost_list.append(cost_iter)
                     u_list.append(input_iter)
                     x_pred.append(x_pred_iter)
                     u_pred.append(u_pred_iter)
+                    x_terminal_list.append(x_terminal_iter)
                 # Pick the best trajectory among the feasible ones
                 best_iter_loc_ss = cost_list.index(min(cost_list))
                 cost_vec = cost_list[best_iter_loc_ss]
@@ -471,6 +502,7 @@ class iLqr(ControlBase):
                 best_iter = best_iter_loc_ss + min_iter
                 uvar_optimal = u_list[best_iter_loc_ss][best_time]
                 xvar_optimal = x_pred[best_iter_loc_ss][best_time]
+                xf_optimal = x_terminal_list[best_iter_loc_ss][best_time]
                 self.u = uvar_optimal[:, 0]
                 if self.num_horizon > 1:
                     self.u_old = uvar_optimal[:, 1:]
