@@ -305,7 +305,7 @@ class iLqrParam:
 
 
 class iLqr(ControlBase):
-    def __init__(self, ilqr_param, obstacle=None, system_param=None, ilqr_flag=False):
+    def __init__(self, ilqr_param, obstacle=None, system_param=None, ilqr_flag=True):
         ControlBase.__init__(self)
         self.ilqr_param = ilqr_param
         self.system_param = system_param
@@ -331,16 +331,16 @@ class iLqr(ControlBase):
         self.obstacle = obstacle
         self.ilqr_flag = ilqr_flag
 
-    def select_close_ss(self, iter, x0):
-        x = self.ss[iter]
-        one_vec = np.ones((x.shape[1], 1))
-        terminal_guess_vec = np.dot(np.array([x0]).T, one_vec.T)
-        # terminal_guess_vec = (np.dot(np.ones((x.shape[1], 1)), np.array([self.x_terminal_guess]))).T
-        diff = x - terminal_guess_vec
-        norm = la.norm(np.array(diff), 1, axis=0)
-        index_min_norm = np.argsort(norm)
-        print("k neighbors", index_min_norm[0 : self.ilqr_param.num_ss_points])
-        return index_min_norm[0 : self.ilqr_param.num_ss_points]
+    # def select_close_ss(self, iter, x0):
+    #     x = self.ss[iter]
+    #     one_vec = np.ones((x.shape[1], 1))
+    #     terminal_guess_vec = np.dot(np.array([x0]).T, one_vec.T)
+    #     # terminal_guess_vec = (np.dot(np.ones((x.shape[1], 1)), np.array([self.x_terminal_guess]))).T
+    #     diff = x - terminal_guess_vec
+    #     norm = la.norm(np.array(diff), 1, axis=0)
+    #     index_min_norm = np.argsort(norm)
+    #     print("k neighbors", index_min_norm[0 : self.ilqr_param.num_ss_points])
+    #     return index_min_norm[0 : self.ilqr_param.num_ss_points]
 
     def add_trajectory(self, x, u):
         self.ss.append(deepcopy(x.T))
@@ -386,133 +386,51 @@ class iLqr(ControlBase):
             self.num_horizon = self.num_horizon - 1
             print("state", self.x)
         else:
-            for iter in range(self.ilqr_param.max_outloop_iter):
-                # Initialize the list which will store the solution to the ftocp for the l-th iteration in the safe set
-                cost_list = []
-                u_list = []
-                id_list = []
-                x_pred = []
-                u_pred = []
-                x_terminal_list = []
-                for id in range(min_iter, self.iter):
-                    # select k neigbors for initial
-                    lamb = self.ilqr_param.lamb
-                    cost_iter = []
-                    input_iter = []
-                    x_pred_iter = []
-                    u_pred_iter = []
-                    x_terminal_iter = []
-                    if iter == 0:
-                        zt = self.x
-                    else:
-                        zt = xvar_optimal[:, -1]
-                    index_ss_points = self.select_close_ss(id, zt)
-                    for j in index_ss_points:
-                        # define variables
-                        uvar = np.zeros((U_DIM, num_horizon))
-                        xvar = np.zeros((X_DIM, num_horizon + 1))
-                        xvar[:, 0] = self.x
-                        # diffence between xvar and x_track
-                        dX = np.zeros((X_DIM, num_horizon + 1))
-                        dX[:, 0] = xvar[:, 0] - xtarget
-                        x_terminal = self.ss[id][:, j]
-                        cost_terminal = self.Qfun[id][j]
-                        if self.num_horizon > 1:
-                            if self.ilqr_flag == True:
-                                uvar, xvar, lamb = ilqr(
-                                    self.ilqr_param,
-                                    num_horizon,
-                                    self.num_horizon,
-                                    xtarget,
-                                    self.timestep,
-                                    self.obstacle,
-                                    self.system_param,
-                                    x_terminal,
-                                    dX,
-                                    uvar,
-                                    xvar,
-                                    lamb,
-                                    lamb_factor,
-                                    max_lamb,
-                                )
-                            else:
-                                matrix_k, matrix_K = backward_pass(
-                                    xvar,
-                                    uvar,
-                                    x_terminal,
-                                    dX,
-                                    lamb,
-                                    num_horizon,
-                                    self.timestep,
-                                    self.ilqr_param,
-                                    self.obstacle,
-                                    self.system_param,
-                                )
-                                xvar, uvar, cost = forward_pass(
-                                    xvar,
-                                    uvar,
-                                    x_terminal,
-                                    self.ilqr_param,
-                                    self.timestep,
-                                    self.num_horizon,
-                                    matrix_k,
-                                    matrix_K,
-                                    self.system_param,
-                                )
-                            for i in range(1, self.ilqr_param.max_relax_iter + 1):
-                                if np.linalg.norm([xvar[:, -1] - x_terminal]) <= 80.0 * i / (
-                                    10 ** iter
-                                ):
-                                    cost_it = cost_terminal + num_horizon + 100 * i
-                                    break
-                                elif np.linalg.norm(
-                                    [xvar[:, -1] - x_terminal]
-                                ) > 80.0 * self.ilqr_param.max_relax_iter / (10 ** iter):
-                                    cost_it = float("Inf")
-                                    break
-                        else:
-                            x_next = kinetic_bicycle(self.x, self.u_old[:, 0], self.timestep)
-                            xvar[:, -1] = x_next
-                            uvar[:, 0] = self.u_old[:, 0]
-                            cost_it = 1 + cost_terminal
-                            # check for feasibility and store the solution
-                            if (
-                                np.linalg.norm([x_next[:] - x_terminal[:]])
-                                <= self.ilqr_param.reach_error
-                            ):
-                                cost_it = 1 + cost_terminal
-                            else:
-                                cost_it = float("Inf")
-                        # Store the cost and solution associated with xf. From these solution we will pick and apply the best one
-                        cost_iter.append(cost_it)
-                        u_pred_iter.append(deepcopy(uvar[:, 0]))
-                        x_pred_iter.append(deepcopy(xvar))
-                        input_iter.append(deepcopy(uvar))
-                        x_terminal_iter.append(deepcopy(x_terminal))
-                    id_list.append(index_ss_points)
-                    cost_list.append(cost_iter)
-                    u_list.append(input_iter)
-                    x_pred.append(x_pred_iter)
-                    u_pred.append(u_pred_iter)
-                    x_terminal_list.append(x_terminal_iter)
-                # Pick the best trajectory among the feasible ones
-                best_iter_loc_ss = cost_list.index(min(cost_list))
-                cost_vec = cost_list[best_iter_loc_ss]
-                best_time = cost_vec.index(min(cost_vec))
-                best_iter = best_iter_loc_ss + min_iter
-                uvar_optimal = u_list[best_iter_loc_ss][best_time]
-                xvar_optimal = x_pred[best_iter_loc_ss][best_time]
-                xf_optimal = x_terminal_list[best_iter_loc_ss][best_time]
-                self.u = uvar_optimal[:, 0]
-                if self.num_horizon > 1:
-                    self.u_old = uvar_optimal[:, 1:]
-                if iter == 2:
-                    # Change time horizon length
-                    if (id_list[best_iter_loc_ss][best_time] + 1) > (
-                        self.ss[best_iter].shape[1] - 1
-                    ):
-                        self.num_horizon = self.num_horizon - 1
-                    break
+            if self.ilqr_flag == True:
+                u_pred, u_old, num_horizon_new = ilqr(
+                    self.x,
+                    self.u_old,
+                    self.ilqr_param,
+                    num_horizon,
+                    self.num_horizon,
+                    xtarget,
+                    self.timestep,
+                    self.obstacle,
+                    self.system_param,
+                    self.ss,
+                    self.Qfun,
+                    min_iter,
+                    self.iter,
+                    lamb_factor,
+                    max_lamb,
+                )
+            # else:
+            #     matrix_k, matrix_K = backward_pass(
+            #         xvar,
+            #         uvar,
+            #         x_terminal,
+            #         dX,
+            #         lamb,
+            #         num_horizon,
+            #         self.timestep,
+            #         self.ilqr_param,
+            #         self.obstacle,
+            #         self.system_param,
+            #     )
+            #     xvar, uvar, cost = forward_pass(
+            #         xvar,
+            #         uvar,
+            #         x_terminal,
+            #         self.ilqr_param,
+            #         self.timestep,
+            #         self.num_horizon,
+            #         matrix_k,
+            #         matrix_K,
+            #         self.system_param,
+            #     )
+            self.u = u_pred
+            self.u_old = u_old
+            self.num_horizon = num_horizon_new
         self.time += self.timestep
 
 
