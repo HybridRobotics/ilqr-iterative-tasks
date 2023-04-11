@@ -6,7 +6,7 @@ from control.ilqr_helper import *
 import matplotlib.pyplot as plt
 
 
-def ilqr(
+def i2lqr(
     x,
     u_old,
     ilqr_param,
@@ -44,9 +44,6 @@ def ilqr(
             else:
                 zt = xvar_optimal[:, -1]
             index_ss_points = select_close_ss(ss, ilqr_param, id, zt)
-            # for id_ss in index_ss_points:
-            # plt.plot(self.ss[id][0, id_ss], self.ss[id][1, id_ss],'o',color='b',markersize = 15)
-            # plt.plot(self.ss[id][0,:],self.ss[id][1,:], 'o',color = 'r')
             for j in index_ss_points:
                 # define variables
                 uvar = np.zeros((U_DIM, num_horizon))
@@ -117,10 +114,14 @@ def ilqr(
                             xvar = xvar_new
                             lamb /= lamb_factor
                             if abs((cost_new - cost) / cost) < ilqr_param.eps:
+                                print(
+                                    "iterations of " + str(j) + " that ilqr used :" + str(iter_ilqr)
+                                )
                                 print("Convergence achieved")
                                 break
                         else:
                             lamb *= lamb_factor
+                            # print('iter ilqr', iter_ilqr)
                             if lamb > max_lamb:
                                 break
                     for i in range(1, ilqr_param.max_relax_iter + 1):
@@ -162,12 +163,6 @@ def ilqr(
         uvar_optimal = u_list[best_iter_loc_ss][best_time]
         xvar_optimal = x_pred[best_iter_loc_ss][best_time]
         xf_optimal = x_terminal_list[best_iter_loc_ss][best_time]
-        # for i in range(num_horizon+1):
-        #     plt.plot(xvar_optimal[0, i], xvar_optimal[1, i], 's', color = 'black', markersize = 15)
-        # plt.plot(xvar_optimal[0,-1], xvar_optimal[1,-1], 'o', color = 'black',markersize = 20)
-        # plt.plot(xvar_optimal[0,0], xvar_optimal[1,0], 'o', color = 'black',markersize = 17)
-        # plt.plot(xf_optimal[0],xf_optimal[1],'o', color = 'g',markersize = 10)
-        # plt.show()
         u_pred = uvar_optimal[:, 0]
         if self_num_horizon > 1:
             u_old_update = uvar_optimal[:, 1:]
@@ -263,3 +258,152 @@ def forward_pass(
     dx_terminal_temp = dx_terminal_temp.reshape(X_DIM)
     cost_new = cost_new + dx_terminal_temp.T @ ilqr_param.matrix_Qlamb @ dx_terminal_temp
     return xvar_new, uvar_new, cost_new
+
+
+def iterative_ctrl(
+    x,
+    u_old,
+    ilqr_param,
+    num_horizon,
+    self_num_horizon,
+    xtarget,
+    timestep,
+    obstacle,
+    system_param,
+    ss,
+    Qfun,
+    min_iter,
+    iter_total,
+):
+    for iter in range(ilqr_param.max_outloop_iter):
+        # Initialize the list which will store the solution to the ftocp for the l-th iteration in the safe set
+        cost_list = []
+        u_list = []
+        id_list = []
+        x_pred = []
+        u_pred = []
+        x_terminal_list = []
+        for id in range(min_iter, iter_total):
+            # select k neigbors for initial
+            lamb = ilqr_param.lamb / 1e15
+            cost_iter = []
+            input_iter = []
+            x_pred_iter = []
+            u_pred_iter = []
+            x_terminal_iter = []
+            if iter == 0:
+                zt = x
+            else:
+                zt = xvar_optimal[:, -1]
+            ss_point, ss_Qfun, index_ss_points = select_candidate_ss(
+                ss, Qfun, ilqr_param, self_num_horizon, id, zt
+            )
+            for j in range(ilqr_param.num_ss_points):
+                # define variables
+                uvar = np.zeros((U_DIM, num_horizon))
+                xvar = np.zeros((X_DIM, num_horizon + 1))
+                xvar[:, 0] = x
+                # diffence between xvar and x_track
+                dX = np.zeros((X_DIM, num_horizon + 1))
+                dX[:, 0] = xvar[:, 0] - xtarget
+                x_terminal = ss_point[:, j]
+                cost_terminal = ss_Qfun[j]
+                if self_num_horizon > 1:
+                    # Iteration of ilqr for tracking
+                    matrix_k, matrix_K = backward_pass(
+                        xvar,
+                        uvar,
+                        x_terminal,
+                        dX,
+                        lamb,
+                        num_horizon,
+                        timestep,
+                        ilqr_param,
+                        obstacle,
+                        system_param,
+                    )
+                xvar, uvar, cost = forward_pass(
+                    xvar,
+                    uvar,
+                    x_terminal,
+                    ilqr_param,
+                    timestep,
+                    self_num_horizon,
+                    matrix_k,
+                    matrix_K,
+                    system_param,
+                )
+                for i in range(1, ilqr_param.max_relax_iter + 1):
+                    if np.linalg.norm([xvar[:, -1] - x_terminal]) <= 1.0 * i / (10 ** iter):
+                        cost_it = cost_terminal + num_horizon + 100 * i
+                        break
+                    elif np.linalg.norm(
+                        [xvar[:, -1] - x_terminal]
+                    ) > 1.0 * ilqr_param.max_relax_iter / (10 ** iter):
+                        cost_it = float("Inf")
+                        break
+                else:
+                    x_next = kinetic_bicycle(x, u_old[:, 0], timestep)
+                    xvar[:, -1] = x_next
+                    uvar[:, 0] = u_old[:, 0]
+                    cost_it = 1 + cost_terminal
+                    # check for feasibility and store the solution
+                    if np.linalg.norm([x_next[:] - x_terminal[:]]) <= ilqr_param.reach_error:
+                        cost_it = 1 + cost_terminal
+                    else:
+                        cost_it = float("Inf")
+                # Store the cost and solution associated with xf. From these solution we will pick and apply the best one
+                cost_iter.append(cost_it)
+                u_pred_iter.append(deepcopy(uvar[:, 0]))
+                x_pred_iter.append(deepcopy(xvar))
+                input_iter.append(deepcopy(uvar))
+                x_terminal_iter.append(deepcopy(x_terminal))
+            id_list.append(index_ss_points)
+            cost_list.append(cost_iter)
+            u_list.append(input_iter)
+            x_pred.append(x_pred_iter)
+            u_pred.append(u_pred_iter)
+            x_terminal_list.append(x_terminal_iter)
+            print("error", cost_iter)
+        # Pick the best trajectory among the feasible ones
+        best_iter_loc_ss = cost_list.index(min(cost_list))
+        cost_vec = cost_list[best_iter_loc_ss]
+        best_time = cost_vec.index(min(cost_vec))
+        best_iter = best_iter_loc_ss + min_iter
+        uvar_optimal = u_list[best_iter_loc_ss][best_time]
+        xvar_optimal = x_pred[best_iter_loc_ss][best_time]
+        xf_optimal = x_terminal_list[best_iter_loc_ss][best_time]
+        u_pred = uvar_optimal[:, 0]
+        if self_num_horizon > 1:
+            u_old_update = uvar_optimal[:, 1:]
+        if iter == 0:
+            # Change time horizon length
+            if (id_list[best_iter_loc_ss][best_time] + 1) > (ss[best_iter].shape[1] - 1):
+                self_num_horizon = self_num_horizon - 1
+            break
+    return u_pred, u_old_update, self_num_horizon
+
+
+def select_candidate_ss(ss, Qfun, ilqr_param, num_horizon, iter, x0):
+    x = ss[iter]
+    Qf = Qfun[iter]
+    one_vec = np.ones((x.shape[1], 1))
+    terminal_guess_vec = np.dot(np.array([x0]).T, one_vec.T)
+    # terminal_guess_vec = (np.dot(np.ones((x.shape[1], 1)), np.array([self.x_terminal_guess]))).T
+    diff = x - terminal_guess_vec
+    norm = la.norm(np.array(diff), 1, axis=0)
+    min_norm = np.argmin(norm)
+    ss_point = x[
+        :, int(min_norm + num_horizon) : int(min_norm + num_horizon + ilqr_param.num_ss_points)
+    ]
+    ss_Qfun = Qf[
+        int(min_norm + num_horizon) : int(min_norm + num_horizon + ilqr_param.num_ss_points)
+    ]
+    print(
+        "k neighbors", [min_norm + num_horizon, min_norm + num_horizon + ilqr_param.num_ss_points]
+    )
+    return (
+        ss_point,
+        ss_Qfun,
+        [min_norm + num_horizon, min_norm + num_horizon + ilqr_param.num_ss_points],
+    )

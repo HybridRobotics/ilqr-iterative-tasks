@@ -245,8 +245,7 @@ class iLqrParam:
         self,
         matrix_Q=0 * np.diag([0.0, 0.0, 0.0, 0.0]),
         matrix_R=0 * np.diag([0.05, 0.05]),
-        matrix_Qlamb=2 * np.diag([1.0, 1.0, 20.0, 0.02]),
-        # matrix_Qlamb=10 * np.diag([1.0, 1.0, 1.0, 1.0]),
+        matrix_Qlamb=10 * np.diag([1.0, 1.0, 20.0, 0.02]),
         num_ss_points=8,
         num_ss_iter=1,
         num_horizon=6,
@@ -331,17 +330,6 @@ class iLqr(ControlBase):
         self.obstacle = obstacle
         self.ilqr_flag = ilqr_flag
 
-    # def select_close_ss(self, iter, x0):
-    #     x = self.ss[iter]
-    #     one_vec = np.ones((x.shape[1], 1))
-    #     terminal_guess_vec = np.dot(np.array([x0]).T, one_vec.T)
-    #     # terminal_guess_vec = (np.dot(np.ones((x.shape[1], 1)), np.array([self.x_terminal_guess]))).T
-    #     diff = x - terminal_guess_vec
-    #     norm = la.norm(np.array(diff), 1, axis=0)
-    #     index_min_norm = np.argsort(norm)
-    #     print("k neighbors", index_min_norm[0 : self.ilqr_param.num_ss_points])
-    #     return index_min_norm[0 : self.ilqr_param.num_ss_points]
-
     def add_trajectory(self, x, u):
         self.ss.append(deepcopy(x.T))
         self.u_ss.append(deepcopy(u.T))
@@ -387,7 +375,7 @@ class iLqr(ControlBase):
             print("state", self.x)
         else:
             if self.ilqr_flag == True:
-                u_pred, u_old, num_horizon_new = ilqr(
+                u_pred, u_old, num_horizon_new = i2lqr(
                     self.x,
                     self.u_old,
                     self.ilqr_param,
@@ -404,30 +392,22 @@ class iLqr(ControlBase):
                     lamb_factor,
                     max_lamb,
                 )
-            # else:
-            #     matrix_k, matrix_K = backward_pass(
-            #         xvar,
-            #         uvar,
-            #         x_terminal,
-            #         dX,
-            #         lamb,
-            #         num_horizon,
-            #         self.timestep,
-            #         self.ilqr_param,
-            #         self.obstacle,
-            #         self.system_param,
-            #     )
-            #     xvar, uvar, cost = forward_pass(
-            #         xvar,
-            #         uvar,
-            #         x_terminal,
-            #         self.ilqr_param,
-            #         self.timestep,
-            #         self.num_horizon,
-            #         matrix_k,
-            #         matrix_K,
-            #         self.system_param,
-            #     )
+            else:
+                u_pred, u_old, num_horizon_new = iterative_ctrl(
+                    self.x,
+                    self.u_old,
+                    self.ilqr_param,
+                    num_horizon,
+                    self.num_horizon,
+                    xtarget,
+                    self.timestep,
+                    self.obstacle,
+                    self.system_param,
+                    self.ss,
+                    self.Qfun,
+                    min_iter,
+                    self.iter,
+                )
             self.u = u_pred
             self.u_old = u_old
             self.num_horizon = num_horizon_new
