@@ -30,8 +30,14 @@ def ilqr(
         cost = 0
         # Forward simulation
         for idx_f in range(num_horizon):
-            uvar[U_ID["accel"], idx_f] = np.clip(uvar[U_ID["accel"], idx_f], ACCEL_MIN, ACCEL_MAX)
-            uvar[U_ID["delta"], idx_f] = np.clip(uvar[U_ID["delta"], idx_f], DELTA_MIN, DELTA_MAX)
+            uvar[U_ID["accel"], idx_f] = np.clip(
+                uvar[U_ID["accel"], idx_f], -system_param.a_max, system_param.a_max
+            )
+            uvar[U_ID["delta"], idx_f] = np.clip(
+                uvar[U_ID["delta"], idx_f],
+                -round(system_param.delta_max, 2),
+                round(system_param.delta_max, 2),
+            )
             xvar[:, idx_f + 1] = kinetic_bicycle(xvar[:, idx_f], uvar[:, idx_f], timestep)
             dX[:, idx_f + 1] = xvar[:, idx_f + 1] - xtarget.T
             l_state = (xvar[:, idx_f] - xtarget).T @ matrix_Q @ (xvar[:, idx_f] - xtarget)
@@ -138,8 +144,10 @@ def forward_pass(
             + matrix_k[:, idx_f]
             + matrix_K[:, :, idx_f] @ (xvar_new[:, idx_f] - xvar[:, idx_f])
         )
-        uvar_new[0, idx_f] = np.clip(uvar_new[0, idx_f], ACCEL_MIN, ACCEL_MAX)
-        uvar_new[1, idx_f] = np.clip(uvar_new[1, idx_f], DELTA_MIN, DELTA_MAX)
+        uvar_new[0, idx_f] = np.clip(uvar_new[0, idx_f], -sys_param.a_max, sys_param.a_max)
+        uvar_new[1, idx_f] = np.clip(
+            uvar_new[1, idx_f], -round(sys_param.delta_max, 2), round(sys_param.delta_max, 2)
+        )
         xvar_new[:, idx_f + 1] = kinetic_bicycle(xvar_new[:, idx_f], uvar_new[:, idx_f], timestep)
         l_state_temp = (
             (xvar_new[:, idx_f] - x_terminal).T
