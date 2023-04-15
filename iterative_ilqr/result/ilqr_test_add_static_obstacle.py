@@ -21,7 +21,9 @@ def test_ilqr(args):
     all_ss_point = False
     all_ss_iter = False
     x0 = [0, 0, 0, 0]
-    ego = base.KineticBicycle(direct_ilqr=direct_ilqr, system_param=base.KineticBicycleParam())
+    ego = base.KineticBicycle(
+        direct_ctrl_policy=direct_ilqr, system_param=base.KineticBicycleParam()
+    )
     ego.set_state(x0)
     ego.set_timestep(dt)
     ego.get_traj()

@@ -4,7 +4,6 @@ from copy import deepcopy
 from utils.constants_kinetic_bicycle import *
 from systems.kinetic_bicycle import *
 from numpy import linalg as la
-import pdb
 from control.nonlinear_lmpc import *
 from control.ilqr_helper import *
 from control.iterative_ilqr import *
@@ -64,9 +63,9 @@ class Obstacle:
 
 
 class KineticBicycle:
-    def __init__(self, direct_ilqr=False, system_param=None):
+    def __init__(self, direct_ctrl_policy=False, system_param=None):
         self.system_param = system_param
-        self.direct_ilqr = direct_ilqr
+        self.direct_ctrl_policy = direct_ctrl_policy
         self.time = 0.0
         self.delta_timer = None
         self.feasible = None
@@ -100,7 +99,7 @@ class KineticBicycle:
         self.feasible = None
 
     def get_traj(self):
-        if self.direct_ilqr == False:
+        if self.direct_ctrl_policy == False:
             angle = np.pi / 6
             total_time_steps = int(120 / self.timestep)
             xcl = np.zeros((X_DIM,))
@@ -142,9 +141,7 @@ class KineticBicycle:
     def calc_ctrl_input(self):
         self.ctrl_policy.set_state(self.x)
         startTimer = datetime.datetime.now()
-
         try:
-
             self.ctrl_policy.calc_input()
             self.u = self.ctrl_policy.get_input()
             self.delta_timer = (datetime.datetime.now() - startTimer).total_seconds()
@@ -245,7 +242,7 @@ class iLqrParam:
         self,
         matrix_Q=0 * np.diag([0.0, 0.0, 0.0, 0.0]),
         matrix_R=0 * np.diag([0.05, 0.05]),
-        matrix_Qlamb=2 * np.diag([1.0, 1.0, 20.0, 0.02]),
+        matrix_Qterminal=2 * np.diag([1.0, 1.0, 20.0, 0.02]),
         num_ss_points=8,
         num_ss_iter=1,
         num_horizon=6,
@@ -273,7 +270,7 @@ class iLqrParam:
     ):
         self.matrix_Q = matrix_Q
         self.matrix_R = matrix_R
-        self.matrix_Qlamb = matrix_Qlamb
+        self.matrix_Qterminal = matrix_Qterminal
         self.num_ss_points = num_ss_points
         self.num_ss_iter = num_ss_iter
         self.num_horizon = num_horizon
@@ -313,6 +310,7 @@ class iLqr(ControlBase):
         self.Qfun = []
         self.ss_point_selected_id = []
         self.x_terminal_guess = None
+        self.x_guess = None
         self.iter = 0
         self.iter_cost = []
         self.itCost = []
@@ -324,7 +322,7 @@ class iLqr(ControlBase):
         self.u_pred = None
         self.cost_improve = None
         self.num_horizon = self.ilqr_param.num_horizon
-        self.matrix_Qlamb = self.ilqr_param.matrix_Qlamb
+        self.matrix_Qterminal = self.ilqr_param.matrix_Qterminal
         self.matrix_Q = self.ilqr_param.matrix_Q
         self.matrix_R = self.ilqr_param.matrix_R
         self.obstacle = obstacle
@@ -370,17 +368,14 @@ class iLqr(ControlBase):
 
     def calc_input(self):
         num_horizon = self.num_horizon
-        # regularization parameters in backwards
-        lamb_factor = self.ilqr_param.lamb_factor
-        max_lamb = self.ilqr_param.max_lamb
         # tracking when matrix_Q is not zero, this is not used right now
         xtarget = np.array([0, 0, 0, 0])
         # select the oldest iteration used
         min_iter = np.max([0, self.iter - self.ilqr_param.num_ss_iter])
         if self.num_horizon < self.ilqr_param.num_horizon:
-            uvar_optimal = self.u_old
-            self.u = uvar_optimal[:, 0]
-            self.u_old = uvar_optimal[:, 1:]
+            self.u_pred = self.u_old
+            self.u = self.u_pred[:, 0]
+            self.u_old = self.u_pred[:, 1:]
             self.num_horizon = self.num_horizon - 1
             print("state", self.x)
         else:
@@ -399,10 +394,10 @@ class iLqr(ControlBase):
                     x_pred_iter = []
                     u_pred_iter = []
                     if iter == 0:
-                        zt = self.x
+                        self.x_guess = self.x
                     else:
-                        zt = xvar_optimal[:, -1]
-                    index_ss_points = self.select_close_ss(id, zt)
+                        self.x_guess = self.x_pred[:, -1]
+                    index_ss_points = self.select_close_ss(id, self.x_guess)
                     for j in index_ss_points:
                         # define variables
                         uvar = np.zeros((U_DIM, num_horizon))
@@ -416,7 +411,6 @@ class iLqr(ControlBase):
                         if self.num_horizon > 1:
                             uvar, xvar, lamb = ilqr(
                                 self.ilqr_param,
-                                num_horizon,
                                 self.num_horizon,
                                 xtarget,
                                 self.timestep,
@@ -427,8 +421,6 @@ class iLqr(ControlBase):
                                 uvar,
                                 xvar,
                                 lamb,
-                                lamb_factor,
-                                max_lamb,
                             )
                             for i in range(1, self.ilqr_param.max_relax_iter + 1):
                                 if np.linalg.norm([xvar[:, -1] - x_terminal]) <= 80.0 * i / (
@@ -461,19 +453,20 @@ class iLqr(ControlBase):
                         input_iter.append(deepcopy(uvar))
                     id_list.append(index_ss_points)
                     cost_list.append(cost_iter)
-                    u_list.append(input_iter)
+                    u_pred.append(input_iter)
                     x_pred.append(x_pred_iter)
-                    u_pred.append(u_pred_iter)
+                    u_list.append(u_pred_iter)
                 # Pick the best trajectory among the feasible ones
                 best_iter_loc_ss = cost_list.index(min(cost_list))
                 cost_vec = cost_list[best_iter_loc_ss]
                 best_time = cost_vec.index(min(cost_vec))
                 best_iter = best_iter_loc_ss + min_iter
-                uvar_optimal = u_list[best_iter_loc_ss][best_time]
-                xvar_optimal = x_pred[best_iter_loc_ss][best_time]
-                self.u = uvar_optimal[:, 0]
+                self.u_pred = u_pred[best_iter_loc_ss][best_time]
+                self.x_pred = x_pred[best_iter_loc_ss][best_time]
+                self.u = self.u_pred[:, 0]
+                self.x_terminal_guess = self.x_pred[:, -1]
                 if self.num_horizon > 1:
-                    self.u_old = uvar_optimal[:, 1:]
+                    self.u_old = self.u_pred[:, 1:]
                 if iter == 2:
                     # Change time horizon length
                     if (id_list[best_iter_loc_ss][best_time] + 1) > (

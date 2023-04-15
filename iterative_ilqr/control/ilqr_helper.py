@@ -106,7 +106,7 @@ def add_control_constraint(u, ilqr_param, sys_param):
 def get_cost_final(
     x,
     x_terminal,
-    matrix_Qlambd,
+    matrix_Qterminal,
     obstacle,
     ilqr_param,
 ):
@@ -116,8 +116,8 @@ def get_cost_final(
     # Add convex hull constraint as the terminal cost
     # Add state barrier max
     diff = x[:, -1] - x_terminal
-    l_x_f = (2 * matrix_Qlambd @ diff).reshape(4, 1)
-    l_xx_f = 2 * matrix_Qlambd
+    l_x_f = (2 * matrix_Qterminal @ diff).reshape(4, 1)
+    l_xx_f = 2 * matrix_Qterminal
     if obstacle is not None:
         safety_margin = ilqr_param.safety_margin
         q1 = ilqr_param.tuning_obs_q1
@@ -148,15 +148,3 @@ def get_cost_final(
     l_x[:] = l_x_f.squeeze()
     l_xx[:, :] = l_xx_f.squeeze()
     return l_x, l_xx
-
-
-def get_termianl_state_idex(ss_xcurv, Qfun, xt):
-    xcurv = ss_xcurv[-1]
-    xcurv = np.array(xcurv)
-    one_vec = np.ones((xcurv.shape[1], 1))
-    x0_vec = (np.dot(np.array([xt]).T, one_vec.T)).T
-    xcurv = xcurv.T
-    diff = xcurv - x0_vec
-    norm = la.norm(diff, 1, axis=1)
-    min_index = np.argmin(norm)
-    return min_index
