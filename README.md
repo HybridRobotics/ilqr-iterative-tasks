@@ -46,6 +46,7 @@ This allows to test the nonlinear lmpc controller. The argparse arguments are li
 | `num_ss_points` | int | any number that is greater than `1` | history states used for learning |
 | `ss_option` | string | `space`, `time` or `all` | criteria for history states selection |
 |   `plotting`   | action |               `store_true`                |                    save plotting if true                     |
+|   `save-trajectory`   | action |               `store_true`                |                    save simulator will store the history states and inputs if true                     |
 
 
 #### Iterative lqr for iterative tasks
@@ -62,6 +63,7 @@ This allows to test the iterative ilqr controller. The argparse arguments are li
 | `num_ss_iters` | int | any number that is greater than `1` | iterations used for learning |
 | `num_ss_points` | int | any number that is greater than `1` | history states used for learning |
 |   `plotting`   | action |               `store_true`                |                    save plotting if true                     |
+|   `save-trajectory`   | action |               `store_true`                |                    save simulator will store the history states and inputs if true                     |
 
 #### Known Issues
 To change the simulation timestep, the number of prediction horizon and number of history states used for learning should be changed.
