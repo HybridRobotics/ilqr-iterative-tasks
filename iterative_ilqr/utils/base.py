@@ -42,7 +42,9 @@ class Obstacle:
                 x_obs.append(data[0] + self.width * np.cos(index))
                 y_obs.append(data[1] + self.height * np.sin(index))
             if count % 5 == 0:
-                plt.plot(x_obs, y_obs, "-k", label="Obstacle", linewidth=5, alpha=1 - count / 90)
+                plt.plot(
+                    x_obs, y_obs, "-k", label="Obstacle", linewidth=5, alpha=max(0, 1 - count / 90)
+                )
             count += 1
 
     def update_obstacle(self):
