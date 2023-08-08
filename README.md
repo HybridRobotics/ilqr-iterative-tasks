@@ -1,10 +1,17 @@
-iterative-ilqr
+iterative-ilqr-tasks
 ==========
 
 This repository provides a toolkit to test iterative learning controller.
 
-
-## Features
+## References
+```
+@inproceedings{zeng2023i2lqr,
+   title={i2LQR: Iterative LQR for Iterative Tasks in Dynamic Environments}, 
+   author={Yifan Zeng and Suiyi He and Han Hoang Nguyen and Yihan Li and Zhongyu Li and Koushil Sreenath and Jun Zeng},
+   booktitle={2023 62nd IEEE Conference on Decision and Control (CDC)}, 
+   year={2023},
+}
+```
 
 ## Installation
 * We recommend creating a new conda environment:
@@ -31,7 +38,6 @@ Please contact major contributors of this repository for additional information.
 
 ## Docs
 The following documentation contains documentation and common terminal commands for simulations and testing.
-
 
 #### Nonlinear LMPC
 Run
@@ -66,11 +72,9 @@ This allows to test the iterative ilqr controller. The argparse arguments are li
 |   `save-trajectory`   | action |               `store_true`                |                    save simulator will store the history states and inputs if true                     |
 
 #### Known Issues
-To change the simulation timestep, the number of prediction horizon and number of history states used for learning should be changed.
-
-No noise is added to the simulation during the dynamics update. The noise will result in failure when the robotics approaches the terminal point.
-
-Current discretization time for system dynamics update is same as the simulation timestep. A smaller this value will also result in failure.
+- To change the simulation timestep, the number of prediction horizon and number of history states used for learning should be changed.
+- No noise is added to the simulation during the dynamics update. The noise will result in failure when the robotics approaches the terminal point.
+- Current discretization time for system dynamics update is same as the simulation timestep. A smaller this value will also result in failure.
 
 
 
