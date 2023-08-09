@@ -4,6 +4,7 @@ iterative-ilqr-tasks
 This repository provides a toolkit to test iterative learning controller.
 
 ## References
+If you find this project useful in your work, please consider citing following paper [[arXiv]](https://arxiv.org/abs/2302.14246):
 ```
 @inproceedings{zeng2023i2lqr,
    title={i2LQR: Iterative LQR for Iterative Tasks in Dynamic Environments}, 
@@ -52,7 +53,7 @@ This allows to test the nonlinear lmpc controller. The argparse arguments are li
 | `num_ss_points` | int | any number that is greater than `1` | history states used for learning |
 | `ss_option` | string | `space`, `time` or `all` | criteria for history states selection |
 |   `plotting`   | action |               `store_true`                |                    save plotting if true                     |
-|   `save-trajectory`   | action |               `store_true`                |                    save simulator will store the history states and inputs if true                     |
+|   `save_trajectory`   | action |               `store_true`                |                    save simulator will store the history states and inputs if true                     |
 
 
 #### Iterative lqr for iterative tasks
@@ -69,7 +70,7 @@ This allows to test the iterative ilqr controller. The argparse arguments are li
 | `num_ss_iters` | int | any number that is greater than `1` | iterations used for learning |
 | `num_ss_points` | int | any number that is greater than `1` | history states used for learning |
 |   `plotting`   | action |               `store_true`                |                    save plotting if true                     |
-|   `save-trajectory`   | action |               `store_true`                |                    save simulator will store the history states and inputs if true                     |
+|   `save_trajectory`   | action |               `store_true`                |                    save simulator will store the history states and inputs if true                     |
 
 #### Known Issues
 - To change the simulation timestep, the number of prediction horizon and number of history states used for learning should be changed.
