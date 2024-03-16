@@ -1,16 +1,19 @@
 iterative-ilqr-tasks
 ==========
 
-This repository provides a toolkit to test iterative learning controller.
+This repository provides a toolkit to test a novel control strategy called Iterative Linear Quadratic Regulator for Iterative Tasks (i2LQR). The strategy aims to improve closed-loop performance with local trajectory optimization for iterative tasks in a dynamic environment.
+
 
 ## References
-If you find this project useful in your work, please consider citing following paper [[arXiv]](https://arxiv.org/abs/2302.14246):
+If you find this project useful in your work, please consider citing following paper [[arXiv]](https://arxiv.org/abs/2302.14246) | [[IEEE]](https://ieeexplore.ieee.org/document/10383960):
 ```
 @inproceedings{zeng2023i2lqr,
-   title={i2LQR: Iterative LQR for Iterative Tasks in Dynamic Environments}, 
-   author={Yifan Zeng and Suiyi He and Han Hoang Nguyen and Yihan Li and Zhongyu Li and Koushil Sreenath and Jun Zeng},
-   booktitle={2023 62nd IEEE Conference on Decision and Control (CDC)}, 
-   year={2023},
+  title={i2LQR: Iterative LQR for Iterative Tasks in Dynamic Environments},
+  author={Zeng, Yifan and He, Suiyi and Nguyen, Han Hoang and Li, Yihan and Li, Zhongyu and Sreenath, Koushil and Zeng, Jun},
+  booktitle={2023 62nd IEEE Conference on Decision and Control (CDC)},
+  pages={5255--5260},
+  year={2023},
+  organization={IEEE}
 }
 ```
 
@@ -28,7 +31,7 @@ pip install -e .
 
 ## Auto Testing
 
-In this project, `pytest` is used to test the code autonomously after pushing new code to the repository. Currently, three files in the `tests` folder are used for testing pid or mpc tracking controller, mpc-cbf controller and racing game planner, respectively. To test other features, add files to the `tests` folder and update the `tests.yml` file under the `.github/workflows` folder.
+In this project, `pytest` is used to test the code autonomously after pushing new code to the repository. Currently, files in the `tests` folder are used for testing i2LQR controller and nonlinear learning based MPC (NLMPC) controller, respectively. To test other features, add files to the `tests` folder and update the `tests.yml` file under the `.github/workflows` folder.
 
 ## Contributing
 Execute `pre-commit install` to install git hooks in your `.git/` directory, which allows auto-formatting if you are willing to contribute to this repository.
@@ -73,9 +76,6 @@ This allows to test the iterative ilqr controller. The argparse arguments are li
 |   `save_trajectory`   | action |               `store_true`                |                    save simulator will store the history states and inputs if true                     |
 
 #### Known Issues
-- To change the simulation timestep, the number of prediction horizon and number of history states used for learning should be changed.
-- No noise is added to the simulation during the dynamics update. The noise will result in failure when the robotics approaches the terminal point.
-- Current discretization time for system dynamics update is same as the simulation timestep. A smaller this value will also result in failure.
-
-
-
+- To change the simulation timestep, the number of prediction horizons and the number of history states used for learning should be adjusted.
+- No noise is added to the simulation during the dynamics update. The presence of noise may lead to failure when the robotics approaches the terminal point.
+- The current discretization time for system dynamics update is the same as the simulation timestep. Decreasing this value may also result in failure.
